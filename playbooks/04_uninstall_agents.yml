@@ -1,0 +1,25 @@
+---
+# Rollback: uninstall MeshCentral agent from all lab devices
+# Usage: ansible-playbook -i ~/lab/hosts.ini uninstall_agents.yml --forks 50
+#
+# USE ONLY if you need to back out the rollout.
+
+- name: Uninstall MeshCentral agents
+  hosts: lab
+  gather_facts: false
+  tasks:
+
+    - name: Run MeshAgent uninstaller
+      win_shell: |
+        $exe = "C:\Program Files\Mesh Agent\MeshAgent.exe"
+        if (Test-Path $exe) {
+          & $exe -fulluninstall
+        } else {
+          Write-Output "MeshAgent not installed"
+        }
+      register: uninstall_result
+      failed_when: false
+
+    - name: Report uninstall result
+      debug:
+        msg: "{{ inventory_hostname }}: {{ uninstall_result.stdout_lines | default(['done']) }}"

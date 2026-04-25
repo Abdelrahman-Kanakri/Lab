@@ -1,0 +1,38 @@
+---
+# Enroll lab devices in MeshCentral by pushing and installing the agent MSI
+# Usage: ansible-playbook -i ~/lab/hosts.ini enroll_meshcentral.yml --forks 50
+#
+# Prereqs:
+#   - ~/lab/files/meshagent.msi exists (download from MeshCentral web UI)
+#   - ansible lab -m win_ping passes on target hosts
+
+- name: Enroll lab devices in MeshCentral
+  hosts: lab
+  gather_facts: false
+  tasks:
+
+    - name: Copy MeshAgent MSI to target
+      win_copy:
+        src: /home/abood/lab/files/meshagent.msi
+        dest: C:\Windows\Temp\meshagent.msi
+
+    - name: Install MeshAgent silently
+      win_command: msiexec /i C:\Windows\Temp\meshagent.msi /quiet /norestart
+
+    - name: Wait for Mesh Agent service to come up
+      win_service:
+        name: "Mesh Agent"
+        state: started
+      register: svc_status
+      retries: 6
+      delay: 5
+      until: svc_status is succeeded
+
+    - name: Report service status
+      debug:
+        msg: "Mesh Agent on {{ inventory_hostname }}: {{ svc_status.state }}"
+
+    - name: Clean up installer
+      win_file:
+        path: C:\Windows\Temp\meshagent.msi
+        state: absent

@@ -1,0 +1,25 @@
+---
+# Verify MeshAgent is running on every lab device
+# Usage: ansible-playbook -i ~/lab/hosts.ini verify_agents.yml --forks 50
+
+- name: Verify MeshCentral agents
+  hosts: lab
+  gather_facts: false
+  tasks:
+
+    - name: Check Mesh Agent service
+      win_shell: Get-Service "Mesh Agent" | Select-Object -ExpandProperty Status
+      register: mesh_status
+      changed_when: false
+      failed_when: false
+
+    - name: Record hostname and status
+      debug:
+        msg: "{{ inventory_hostname }}: {{ mesh_status.stdout | default('NOT INSTALLED') | trim }}"
+
+    - name: Summary — count by status
+      run_once: true
+      debug:
+        msg:
+          - "Total hosts: {{ ansible_play_hosts | length }}"
+          - "Running:    {{ ansible_play_hosts | map('extract', hostvars, 'mesh_status') | selectattr('stdout', 'search', 'Running') | list | length }}"

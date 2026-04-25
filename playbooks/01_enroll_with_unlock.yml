@@ -1,0 +1,90 @@
+---
+# Enroll locked lab devices in MeshCentral.
+# Flow per device: Unlock -> install MeshAgent -> Re-Lock
+#
+# Why the unlock/lock wrap:
+#   Lock-StudentDevice.ps1 sets DisableMSI=2 (blocks MSI installs for EVERYONE,
+#   including admins) and applies SRP rules that block .msi in %TEMP%.
+#   We lift those temporarily, install the agent, then re-apply the lock.
+#   The Mesh Agent runs as a SYSTEM service and is unaffected by the re-lock.
+#
+# Usage:
+#   ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/enroll_with_unlock.yml --forks 50
+#
+# Prereqs:
+#   - ~/lab/files/meshagent.msi exists
+#   - ansible lab -m win_ping passes on target hosts
+#   - Lock/Unlock scripts exist at the paths in vars below
+
+- name: Enroll locked lab devices (Unlock -> Install -> Re-Lock)
+  hosts: lab
+  gather_facts: false
+  vars:
+    unlock_script_src: /home/abood/lab/windows-scripts/05_Unlock-StudentDevice.ps1
+    lock_script_src:   /home/abood/lab/windows-scripts/02_Lock-StudentDevice.ps1
+    mesh_exe_src:      /home/abood/lab/files/meshagent.exe
+    remote_stage:      C:\Windows\LabDeploy
+
+  tasks:
+
+    - name: Ensure remote staging folder exists
+      win_file:
+        path: "{{ remote_stage }}"
+        state: directory
+
+    - name: Copy Unlock script
+      win_copy:
+        src: "{{ unlock_script_src }}"
+        dest: "{{ remote_stage }}\\Unlock-StudentDevice.ps1"
+
+    - name: Copy Lock script
+      win_copy:
+        src: "{{ lock_script_src }}"
+        dest: "{{ remote_stage }}\\Lock-StudentDevice.ps1"
+
+    - name: Copy MeshAgent EXE installer
+      win_copy:
+        src: "{{ mesh_exe_src }}"
+        dest: "{{ remote_stage }}\\meshagent.exe"
+
+    - name: Run Unlock (lifts DisableMSI + SRP)
+      win_shell: |
+        powershell.exe -ExecutionPolicy Bypass -NoProfile -File "{{ remote_stage }}\Unlock-StudentDevice.ps1"
+      register: unlock_result
+      changed_when: true
+
+    - name: Force policy refresh after unlock
+      win_command: gpupdate /force
+
+    - name: Install MeshAgent silently (.exe -fullinstall registers as Windows service)
+      win_command: "{{ remote_stage }}\\meshagent.exe -fullinstall"
+      register: install_result
+
+    - name: Wait for Mesh Agent service to come up
+      win_service:
+        name: "Mesh Agent"
+        state: started
+      register: svc_status
+      retries: 6
+      delay: 5
+      until: svc_status is succeeded
+
+    - name: Re-run Lock (restores all restrictions)
+      win_shell: |
+        powershell.exe -ExecutionPolicy Bypass -NoProfile -File "{{ remote_stage }}\Lock-StudentDevice.ps1"
+      register: relock_result
+      changed_when: true
+
+    - name: Verify MeshAgent still running after re-lock
+      win_shell: (Get-Service "Mesh Agent").Status
+      register: final_status
+      changed_when: false
+
+    - name: Cleanup staging folder
+      win_file:
+        path: "{{ remote_stage }}"
+        state: absent
+
+    - name: Report per-host result
+      debug:
+        msg: "{{ inventory_hostname }}: MeshAgent {{ final_status.stdout | trim }}"
