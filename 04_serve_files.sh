@@ -8,7 +8,7 @@ source "$(dirname "$0")/config.env"
 cd "$LAB_FILES"
 
 echo "Serving $LAB_FILES on http://$CONTROLLER_IP:8080"
-echo "Lab devices can fetch files like: http://$CONTROLLER_IP:8080/meshagent.msi"
+echo "Lab devices can fetch files like: http://$CONTROLLER_IP:8080/MeshService64.exe"
 echo "Press Ctrl+C to stop."
 echo ""
 ls -lh "$LAB_FILES"

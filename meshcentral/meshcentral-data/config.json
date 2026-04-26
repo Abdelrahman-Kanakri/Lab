@@ -6,7 +6,7 @@
     "_cert": "myserver.mydomain.com",
     "_WANonly": true,
     "_LANonly": true,
-    "_sessionKey": "MyReallySecretPassword1",
+    "sessionKey": "556e9a16ee786a9fb8ec49f729e56291e36aa5231d76fa5b791409ae9c8e9ef9",
     "_port": 443,
     "_aliasPort": 443,
     "_redirPort": 80,
@@ -17,7 +17,7 @@
       "_title": "MyServer",
       "_title2": "Servername",
       "_minify": true,
-      "_newAccounts": true,
+      "newAccounts": false,
       "_userNameIsEmail": true
     }
   },

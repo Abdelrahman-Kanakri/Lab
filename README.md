@@ -18,6 +18,8 @@ Files are numbered by **order of use** — `01_*` first, `02_*` next, etc.
 ├── 02_add_devices.sh                      ← STEP 2: discover + enroll new devices
 ├── 03_check_lab.sh                        ← daily: health snapshot
 ├── 04_serve_files.sh                      ← occasional: HTTP server for file pushes
+├── collect_macs.py                        ← collect MACs over WinRM → macs.txt (for WoL)
+├── macs.txt                               ← generated, one MAC per line
 │
 ├── docs/
 │   ├── 01_IMPLEMENTATION.md               ← full step-by-step build guide
@@ -46,7 +48,7 @@ Files are numbered by **order of use** — `01_*` first, `02_*` next, etc.
 │       └── Enable-WinRM.bat
 │
 ├── files/
-│   └── meshagent.exe                      ← MeshCentral agent (server-keyed)
+│   └── MeshService64.exe                  ← MeshCentral agent (server-keyed; copied from signedagents/)
 │
 ├── meshcentral/                           ← server install (~580 MB)
 └── backups/
@@ -59,7 +61,8 @@ Files are numbered by **order of use** — `01_*` first, `02_*` next, etc.
 ### First-time setup (Linux controller)
 1. Edit `config.env` — set `CONTROLLER_IP`
 2. Run `01_install_server.sh` — installs and starts MeshCentral
-3. Open `https://<CONTROLLER_IP>` → create admin → make `Lab` group → download `meshagent.exe` to `files/`
+3. Open `https://<CONTROLLER_IP>` → create admin → make `Lab` group
+4. `cp ~/lab/meshcentral/meshcentral-data/signedagents/MeshService64.exe ~/lab/files/`
 
 ### First-time setup (each lab device, physical)
 1. USB → run `windows-scripts/01_Enroll-LabDevice.bat` — creates labadmin + WinRM
@@ -94,6 +97,8 @@ Files are numbered by **order of use** — `01_*` first, `02_*` next, etc.
 - **[docs/02_MANAGE_DEVICES.md](docs/02_MANAGE_DEVICES.md)** — day-to-day inventory checks and adding new devices
 - **[docs/03_JOBMATE_LINUX.md](docs/03_JOBMATE_LINUX.md)** — onboard a Linux teammate
 - **[docs/04_JOBMATE_WINDOWS.md](docs/04_JOBMATE_WINDOWS.md)** — onboard a Windows teammate
+- **[docs/05_DEVICE_CONFIG.md](docs/05_DEVICE_CONFIG.md)** — per-Windows-device config reference (every setting on a clean lab device)
+- **[docs/06_CONTROLLER_CONFIG.md](docs/06_CONTROLLER_CONFIG.md)** — Linux controller config reference (config.env, systemd, MeshCentral config.json, firewall)
 - **[LAB_DAY_CHECKLIST.md](LAB_DAY_CHECKLIST.md)** — original on-site checklist (kept for reference)
 - **[MESHCENTRAL_SETUP.md](MESHCENTRAL_SETUP.md)** — original MeshCentral reference (kept for reference)
 
