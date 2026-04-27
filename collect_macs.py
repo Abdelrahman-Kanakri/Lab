@@ -5,6 +5,7 @@ Reads hosts from ~/lab/hosts.ini and writes MACs to ~/lab/macs.txt.
 Usage: python3 ~/lab/collect_macs.py
 """
 
+import os
 import re
 import sys
 import socket
@@ -14,8 +15,9 @@ from pathlib import Path
 
 HOSTS_INI = Path.home() / "lab" / "hosts.ini"
 MACS_OUT   = Path.home() / "lab" / "macs.txt"
-USER       = "labadmin"
-PASSWORD   = "2026"
+# Source ~/lab/config.env before running, OR these defaults are used.
+USER       = os.environ.get("LAB_ADMIN_USER", "labadmin")
+PASSWORD   = os.environ.get("LAB_ADMIN_PASS", "2026")
 PORT       = 5985
 THREADS    = 20
 

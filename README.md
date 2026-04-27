@@ -99,6 +99,7 @@ Files are numbered by **order of use** — `01_*` first, `02_*` next, etc.
 - **[docs/04_JOBMATE_WINDOWS.md](docs/04_JOBMATE_WINDOWS.md)** — onboard a Windows teammate
 - **[docs/05_DEVICE_CONFIG.md](docs/05_DEVICE_CONFIG.md)** — per-Windows-device config reference (every setting on a clean lab device)
 - **[docs/06_CONTROLLER_CONFIG.md](docs/06_CONTROLLER_CONFIG.md)** — Linux controller config reference (config.env, systemd, MeshCentral config.json, firewall)
+- **[docs/07_UNREACHABLE_DEVICES.md](docs/07_UNREACHABLE_DEVICES.md)** — triage and recover hosts that fail enrollment (`unreachable=1` / `failed≥1`)
 - **[LAB_DAY_CHECKLIST.md](LAB_DAY_CHECKLIST.md)** — original on-site checklist (kept for reference)
 - **[MESHCENTRAL_SETUP.md](MESHCENTRAL_SETUP.md)** — original MeshCentral reference (kept for reference)
 

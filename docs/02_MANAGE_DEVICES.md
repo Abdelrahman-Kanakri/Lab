@@ -2,8 +2,20 @@
 
 Day-to-day operations for managing the lab inventory. Two scripts cover everything:
 
-- **[check_lab.sh](../check_lab.sh)** — read-only health snapshot (run anytime)
-- **[add_devices.sh](../add_devices.sh)** — discover new devices and enroll them
+- **[03_check_lab.sh](../03_check_lab.sh)** — read-only health snapshot (run anytime)
+- **[02_add_devices.sh](../02_add_devices.sh)** — discover new devices and enroll them
+
+> **Need to *change* something, not just check it?**
+> - To adjust a setting **on the Linux controller** (controller IP, lab subnet,
+>   admin password, MeshCentral port, etc.) →
+>   [`06_CONTROLLER_CONFIG.md`](06_CONTROLLER_CONFIG.md)
+> - To adjust a setting **on the Windows devices** (admin creds, lockdown,
+>   power schedule, wallpaper, etc.) →
+>   [`05_DEVICE_CONFIG.md`](05_DEVICE_CONFIG.md)
+> - First-time build of a fresh controller →
+>   [`01_IMPLEMENTATION.md`](01_IMPLEMENTATION.md)
+> - Some hosts came back as `unreachable=1` / `failed≥1` →
+>   [`07_UNREACHABLE_DEVICES.md`](07_UNREACHABLE_DEVICES.md)
 
 ---
 

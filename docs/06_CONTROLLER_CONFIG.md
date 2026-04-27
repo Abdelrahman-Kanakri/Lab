@@ -1,322 +1,425 @@
-# Linux Controller Configuration Reference
+# Linux Controller — Configuration Cookbook
 
-Everything that defines the **Nobara controller box** itself: what it runs,
-where the settings live, and how to change each one cleanly.
+Every adjustable setting on the Nobara controller box, with the exact command
+to change it and the exact command to verify the change. Each section is
+self-contained — find the setting you want to change, copy the commands, done.
 
-This is the controller-side equivalent of [`05_DEVICE_CONFIG.md`](05_DEVICE_CONFIG.md).
-Use this when something about the **controller** needs to change (its IP, the
-MeshCentral port, where files live, who owns the systemd service, etc.).
-
----
-
-## 1. Canonical controller state
-
-After a clean install, the Nobara box looks like this:
-
-| Area | What | Default value | Set by |
-|---|---|---|---|
-| **Identity** | Controller IP on lab subnet | `10.3.5.96` | DHCP / static config + [`config.env`](../config.env) |
-| **Identity** | Controller hostname | `ABK` (any) | OS install |
-| **Identity** | User running everything | `abood` | OS install |
-| **MeshCentral** | Install dir | `~/lab/meshcentral/` | [`01_install_server.sh`](../01_install_server.sh) |
-| **MeshCentral** | systemd unit | `/etc/systemd/system/meshcentral.service` | [`01_install_server.sh`](../01_install_server.sh) |
-| **MeshCentral** | Service runs as user | `abood` | systemd unit |
-| **MeshCentral** | HTTPS port | `443` | `meshcentral-data/config.json` (default) |
-| **MeshCentral** | HTTP redirect port | `80` | `meshcentral-data/config.json` (default) |
-| **MeshCentral** | Agent (MPS) port | `4433` | `meshcentral-data/config.json` (default) |
-| **MeshCentral** | Cert binding (CN) | `10.3.5.96` | systemd `ExecStart=... --cert <IP>` |
-| **MeshCentral** | sessionKey | random 64-char hex | `meshcentral-data/config.json` |
-| **MeshCentral** | New account signups | `false` (disabled) | `meshcentral-data/config.json` |
-| **MeshCentral** | Admin login | `admin` (username) | First account created in web UI |
-| **Ansible** | Install location | `~/.local/bin/ansible*` | `pip3 install --user ansible` |
-| **Ansible** | Windows collection | installed | `ansible-galaxy collection install ansible.windows` |
-| **Ansible** | WinRM library | `pywinrm` (~/.local) | `pip3 install --user pywinrm` |
-| **Ansible** | Inventory | `~/lab/hosts.ini` | auto-managed by `02_add_devices.sh` |
-| **Network** | Firewall — incoming | TCP `80`, `443` open (firewalld) | [`01_install_server.sh`](../01_install_server.sh) |
-| **Network** | File-share HTTP | TCP `8080` (only when [`04_serve_files.sh`](../04_serve_files.sh) is running) | manual |
-| **PATH** | `~/.local/bin` in PATH | yes | `~/.bashrc` + `config.env` |
-| **Backup** | Backup dir | `~/lab/backups/` | manual / cron |
+For the first-time build of a brand-new controller, follow [`01_IMPLEMENTATION.md`](01_IMPLEMENTATION.md).
+This file is for **changes** to an already-running controller.
 
 ---
 
-## 2. Where the config lives — file map
+## How this file is organized
 
-| File | Purpose | Edit it when |
+1. **Quick map** — which file holds which setting
+2. **Per-setting recipes** — change it / verify it
+3. **Common scenarios** — multi-setting changes that touch several files (new IP, new lab subnet, rotate admin password, …)
+
+Convention used in commands:
+- `<UPPERCASE>` = a placeholder you must replace
+- All commands assume you've run `source ~/lab/config.env` first
+- Commands that need `sudo` are marked with `sudo`
+
+---
+
+## 1. Quick map: where each setting lives
+
+| Setting | File | Variable / key |
 |---|---|---|
-| [`~/lab/config.env`](../config.env) | Single source of truth for paths and the controller IP. Sourced by every shell script. | Controller IP changes, paths move, you add new env-vars to share across scripts |
-| `/etc/systemd/system/meshcentral.service` | systemd unit that auto-starts MeshCentral on boot | IP changes (the `--cert` arg), node binary path changes, you want to run as a different user |
-| `~/lab/meshcentral/meshcentral-data/config.json` | MeshCentral server settings: ports, sessionKey, signups, branding, SMTP, LDAP, etc. | You want to change a MeshCentral feature |
-| `~/lab/hosts.ini` | Ansible inventory + connection variables (user, password, transport) | Lab admin creds change, new device added |
-| `~/.bashrc` | Adds `~/.local/bin` to interactive shell PATH | One-time during install |
-| `firewalld` rules | Inbound port permissions | You change MeshCentral ports |
-| `~/lab/meshcentral/meshcentral-data/signedagents/` | Server-keyed Windows agent binaries (auto-regenerated) | After IP change — re-copy `MeshService64.exe` to `~/lab/files/` |
+| Controller IP | [`config.env`](../config.env) | `CONTROLLER_IP` |
+| Controller IP (also) | `/etc/systemd/system/meshcentral.service` | `--cert <IP>` |
+| Lab subnet | [`config.env`](../config.env) | `LAB_RANGE_START` / `LAB_RANGE_END` |
+| Lab device admin user | [`config.env`](../config.env) | `LAB_ADMIN_USER` |
+| Lab device admin password | [`config.env`](../config.env) | `LAB_ADMIN_PASS` |
+| Lab device admin (also) | [`windows-scripts/01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) | `$user` / `$pass` |
+| MeshCentral admin username | (created in web UI on first launch) | — |
+| MeshCentral admin password | reset via CLI | `--resetaccount` |
+| MeshCentral session key | `~/lab/meshcentral/meshcentral-data/config.json` | `settings.sessionKey` |
+| MeshCentral new account signups | `~/lab/meshcentral/meshcentral-data/config.json` | `domains."".newAccounts` |
+| MeshCentral HTTPS port | `~/lab/meshcentral/meshcentral-data/config.json` | `settings.port` |
+| MeshCentral HTTP redirect port | `~/lab/meshcentral/meshcentral-data/config.json` | `settings.redirport` |
+| MeshCentral branding (title) | `~/lab/meshcentral/meshcentral-data/config.json` | `domains."".title` |
+| systemd run-as user | `/etc/systemd/system/meshcentral.service` | `User=` |
+| Firewall open ports | firewalld | — |
 
 ---
 
-## 3. `config.env` — variable reference
+## 2. Per-setting recipes
 
+### 2.1 Controller IP
+
+**What it does:** the IP this Nobara box uses on the lab subnet. The MeshCentral
+TLS cert is signed for this IP. Every Windows agent has it baked into its
+`MeshService64.exe` binary.
+
+**Default:** `10.3.5.96`
+**Where:** `config.env` + systemd unit + agent binary
+
+**Change it (full procedure — touches all three places):**
 ```bash
-export CONTROLLER_IP="10.3.5.96"
-export MESH_ADMIN="admin"
-export LAB_RANGE_START="10.3.5.1"
-export LAB_RANGE_END="10.3.5.254"
-export PATH="$HOME/.local/bin:$PATH"
-export LAB_DIR="$HOME/lab"
-export LAB_FILES="$LAB_DIR/files"
-export LAB_PLAYBOOKS="$LAB_DIR/playbooks"
-export MESH_DIR="$LAB_DIR/meshcentral"
-```
+NEW_IP="<NEW_IP>"
 
-| Variable | What | Read by | Notes |
-|---|---|---|---|
-| `CONTROLLER_IP` | The Nobara box's IP on the lab subnet | [`01_install_server.sh`](../01_install_server.sh), [`02_add_devices.sh`](../02_add_devices.sh), [`04_serve_files.sh`](../04_serve_files.sh) | If you change this you also need to update `/etc/systemd/system/meshcentral.service` (see §4) and re-copy the agent (see §6) |
-| `MESH_ADMIN` | Intended MeshCentral admin username | (currently unused — informational) | Documents intent. The actual username is set when you claim the admin in the web UI |
-| `LAB_RANGE_START` / `LAB_RANGE_END` | Documentation of the lab subnet bounds | (currently unused by scripts — see §10) | The scan in [`02_add_devices.sh`](../02_add_devices.sh) hardcodes its own `SUBNET=` — keep these in sync |
-| `PATH` | Prepends `~/.local/bin` so scripts find `ansible` | every script that calls `ansible*` | Required because ansible is installed via `pip --user`, not dnf |
-| `LAB_DIR` | Root of the lab tree | many scripts | Change only if you move the whole repo |
-| `LAB_FILES` | Where binaries to push to devices live | [`04_serve_files.sh`](../04_serve_files.sh) | Default `~/lab/files/` |
-| `LAB_PLAYBOOKS` | Where playbooks live | (currently unused by scripts) | Documents intent |
-| `MESH_DIR` | MeshCentral install root | [`01_install_server.sh`](../01_install_server.sh) | Default `~/lab/meshcentral/` |
-
-### How to apply a change to `config.env`
-
-```bash
-nano ~/lab/config.env
-source ~/lab/config.env       # reload in the current shell
-```
-
-Anything started **after** the `source` sees the new values. Long-running
-processes (like a running MeshCentral) do not re-read it — they need a restart
-(see §4).
-
----
-
-## 4. systemd unit — `meshcentral.service`
-
-Location: `/etc/systemd/system/meshcentral.service`
-
-```ini
-[Unit]
-Description=MeshCentral Server
-After=network.target
-
-[Service]
-Type=simple
-User=abood
-WorkingDirectory=/home/abood/lab/meshcentral
-ExecStart=/usr/bin/node /home/abood/lab/meshcentral/node_modules/meshcentral/meshcentral.js --cert 10.3.5.96
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-| Line | Purpose | When to change |
-|---|---|---|
-| `User=abood` | OS user that owns the MeshCentral process | If you switch the lab admin to a different OS account |
-| `WorkingDirectory=` | Where MeshCentral runs from (must contain `node_modules/meshcentral`) | If you move `~/lab/meshcentral/` |
-| `ExecStart=` `--cert 10.3.5.96` | Tells MeshCentral which IP to bind its TLS cert to | **Always** when controller IP changes |
-| `ExecStart=` path | Absolute path to node binary | If you switch node versions or install path |
-| `Restart=always` | Auto-restart on crash | rarely changed |
-
-### Apply a change
-```bash
-sudo nano /etc/systemd/system/meshcentral.service
-sudo systemctl daemon-reload
-sudo systemctl restart meshcentral
-sudo systemctl status meshcentral --no-pager | head -10
-```
-
-### Verify
-```bash
-systemctl is-enabled meshcentral     # → enabled
-systemctl is-active meshcentral      # → active
-ss -tlnp | grep -E ':443|:80|:4433'  # all three should be listening
-```
-
-### Logs
-```bash
-journalctl -u meshcentral -f         # follow live
-journalctl -u meshcentral -n 100     # last 100 lines
-journalctl -u meshcentral --since "1 hour ago"
-```
-
----
-
-## 5. MeshCentral `config.json`
-
-Path: `~/lab/meshcentral/meshcentral-data/config.json`
-
-This is the MeshCentral application config, separate from `config.env` (which
-is for shell scripts).
-
-### The underscore convention
-
-A key prefixed with `_` is **disabled** (parser ignores it). This is how
-MeshCentral ships sample values you can opt into — remove the leading `_` to
-activate.
-
-Example — these two lines are NOT the same:
-```json
-"_sessionKey": "MyReallySecretPassword1"   // ignored, MeshCentral picks a random one each restart
-"sessionKey":  "MyReallySecretPassword1"   // active, used as the session signing key
-```
-
-### Settings to know about
-
-```json
-{
-  "settings": {
-    "sessionKey": "<openssl rand -hex 32>",
-    "port": 443,
-    "redirport": 80,
-    "agentport": 4433,
-    "exactports": true,
-    "_LANonly": true,
-    "_WANonly": true,
-    "_minify": true
-  },
-  "domains": {
-    "": {
-      "title": "INU Lab",
-      "title2": "Controller",
-      "newAccounts": false,
-      "userNameIsEmail": false,
-      "_minify": true
-    }
-  },
-  "_letsencrypt": { "...": "..." },
-  "_smtp": { "...": "..." }
-}
-```
-
-| Setting | Effect | When to change |
-|---|---|---|
-| `settings.sessionKey` | Signs browser session cookies. Without it, restarts log everyone out | Set ONCE during install. Rotating it logs everyone out |
-| `settings.port` | HTTPS port | Move off 443 (e.g. to 8443) — also requires firewall + agent regen |
-| `settings.redirport` | Plain-HTTP → HTTPS redirect port | Match your `port` change (e.g. 8080) |
-| `settings.agentport` | Port the MeshAgent connects on | Default reuses the HTTPS port; split for traffic separation |
-| `settings.exactports` | Refuse to silently fall back to higher ports | Set `true` if you want to fail loudly when bind fails |
-| `settings.LANonly` | Bind only to LAN interfaces | Set `true` if controller is on multiple networks |
-| `domains."".title` / `title2` | Browser tab + login screen branding | Cosmetic |
-| `domains."".newAccounts` | Allow strangers to create accounts via the web UI | **Always set to `false` after you claim admin** |
-| `domains."".userNameIsEmail` | Username is the email address | `false` keeps short usernames like `admin` |
-| `letsencrypt.*` | Real cert from Let's Encrypt instead of self-signed | Only if controller has a public hostname |
-| `smtp.*` | Outbound email for password resets / 2FA | If you want self-service password reset |
-
-Full schema: `~/lab/meshcentral/node_modules/meshcentral/sample-config-advanced.json`
-
-### Apply a change
-```bash
-nano ~/lab/meshcentral/meshcentral-data/config.json
-# Validate that JSON is still parseable
-python3 -m json.tool < ~/lab/meshcentral/meshcentral-data/config.json > /dev/null && echo "JSON OK"
-sudo systemctl restart meshcentral
-journalctl -u meshcentral -n 30 --no-pager   # confirm clean startup
-```
-
-### Verify
-```bash
-# Hit the server and confirm it answers
-curl -k https://localhost/ -o /dev/null -s -w "HTTP %{http_code}\n"
-
-# If you changed ports
-ss -tlnp | grep <NEW_PORT>
-```
-
----
-
-## 6. Changing the controller IP — full procedure
-
-The IP appears in **four** places — all four must agree or things break.
-
-```bash
-NEW_IP=10.3.5.50
-
-# 1. Update central config
+# 1. Update config.env
 sed -i "s|^export CONTROLLER_IP=.*|export CONTROLLER_IP=\"$NEW_IP\"|" ~/lab/config.env
 
 # 2. Update systemd unit
-sudo sed -i "s|--cert [0-9.]*|--cert $NEW_IP|" /etc/systemd/system/meshcentral.service
+sudo sed -i "s|--cert [0-9.]\+|--cert $NEW_IP|" /etc/systemd/system/meshcentral.service
 sudo systemctl daemon-reload
 sudo systemctl restart meshcentral
 
-# 3. Re-copy the agent — MeshCentral regenerates signedagents/ on startup
+# 3. Wait for MeshCentral to regenerate signedagents/, then re-copy the agent
 sleep 5
 cp ~/lab/meshcentral/meshcentral-data/signedagents/MeshService64.exe ~/lab/files/
 
-# 4. (optional) Re-point already-enrolled agents (must be done while OLD IP still works)
+# 4. (optional) Re-point already-enrolled agents — only works while OLD IP still reachable
 source ~/lab/config.env
 ansible lab -i ~/lab/hosts.ini -m win_shell \
   -a "& 'C:\\Program Files\\Mesh Agent\\MeshAgent.exe' -meshaction:changeserver -server:wss://$NEW_IP:443/agent.ashx" \
   --forks 50
 ```
 
-After this:
-- Web UI is at `https://$NEW_IP`
-- New device enrollments use the regenerated `~/lab/files/MeshService64.exe`
-- Existing devices were re-pointed in step 4
+**Verify:**
+```bash
+source ~/lab/config.env
+echo "Env: $CONTROLLER_IP"
+grep -- "--cert" /etc/systemd/system/meshcentral.service
+ss -tlnp | grep -E ':443|:80|:4433'
+curl -k -s -o /dev/null -w "Web: HTTP %{http_code}\n" "https://$CONTROLLER_IP"
+```
 
 ---
 
-## 7. Changing MeshCentral ports
+### 2.2 Lab subnet
 
+**What it does:** the IP range that `02_add_devices.sh` scans for new devices.
+
+**Default:** `10.3.5.1 – 10.3.5.254`
+**Where:** `config.env`
+
+**Change it:**
+```bash
+NEW_PREFIX="<e.g. 192.168.1>"
+
+sed -i "s|^export LAB_RANGE_START=.*|export LAB_RANGE_START=\"$NEW_PREFIX.1\"|"   ~/lab/config.env
+sed -i "s|^export LAB_RANGE_END=.*|export LAB_RANGE_END=\"$NEW_PREFIX.254\"|"      ~/lab/config.env
+```
+
+**Verify:**
+```bash
+source ~/lab/config.env
+echo "Range: $LAB_RANGE_START - $LAB_RANGE_END"
+# Confirm 02_add_devices.sh derives the right /24:
+bash -c 'source ~/lab/config.env; echo "Will scan: ${LAB_RANGE_START%.*}.0/24"'
+```
+
+**Side effects:** the existing `~/lab/hosts.ini` still lists the OLD subnet's
+IPs. After changing, run `~/lab/02_add_devices.sh` to discover the new devices,
+or manually edit `hosts.ini`.
+
+---
+
+### 2.3 Lab device admin credentials
+
+**What it does:** the local Windows admin (`labadmin/2026` by default) created
+on every device by the enrollment USB. Ansible uses these creds to connect.
+
+**Default:** `LAB_ADMIN_USER=labadmin`, `LAB_ADMIN_PASS=2026`
+**Where:** `config.env` + `windows-scripts/01_Enroll-LabDevice.ps1` + `hosts.ini` (auto-regenerated)
+
+**Change the username:**
+```bash
+NEW_USER="<newadmin>"
+
+# 1. config.env
+sed -i "s|^export LAB_ADMIN_USER=.*|export LAB_ADMIN_USER=\"$NEW_USER\"|" ~/lab/config.env
+
+# 2. Enrollment script (used by future USB walks)
+sed -i "s|^\$user = \".*\"|\$user = \"$NEW_USER\"|" \
+  ~/lab/windows-scripts/01_Enroll-LabDevice.ps1
+
+# 3. Re-generate hosts.ini (run after walking USB to re-enrol with new user)
+source ~/lab/config.env
+~/lab/02_add_devices.sh
+```
+
+**Rotate the password (fleet-wide, no USB walk needed):**
+```bash
+NEW_PASS="<NewPassword>"
+
+source ~/lab/config.env
+
+# 1. Push new password to every Windows device
+ansible lab -i ~/lab/hosts.ini -m win_user \
+  -a "name=$LAB_ADMIN_USER password=$NEW_PASS update_password=always password_never_expires=yes groups=Administrators" \
+  --forks 50
+
+# 2. Update config.env
+sed -i "s|^export LAB_ADMIN_PASS=.*|export LAB_ADMIN_PASS=\"$NEW_PASS\"|" ~/lab/config.env
+
+# 3. Update windows-scripts/ (so future USB enrols use the new password)
+sed -i "s|ConvertTo-SecureString \".*\" -AsPlainText|ConvertTo-SecureString \"$NEW_PASS\" -AsPlainText|" \
+  ~/lab/windows-scripts/01_Enroll-LabDevice.ps1
+
+# 4. Sync hosts.ini (the script will pick up the new password)
+sed -i "s|^ansible_password=.*|ansible_password=$NEW_PASS|" ~/lab/hosts.ini
+
+# 5. Verify
+ansible lab -i ~/lab/hosts.ini -m win_ping --forks 50
+```
+
+**Verify:**
+```bash
+source ~/lab/config.env
+echo "User: $LAB_ADMIN_USER  /  Pass: $LAB_ADMIN_PASS"
+ansible lab -i ~/lab/hosts.ini -m win_ping --forks 50 | grep -c SUCCESS
+```
+
+---
+
+### 2.4 MeshCentral admin password (forgot it)
+
+**What it does:** the password for the MeshCentral web UI admin login.
+
+**Where:** stored hashed inside `meshcentral-data/meshcentral.db`. Resettable
+via the MeshCentral CLI.
+
+**Change it:**
+```bash
+NEW_PASS="<NewPassword>"
+
+sudo systemctl stop meshcentral
+cd ~/lab/meshcentral
+node node_modules/meshcentral --resetaccount admin --pass "$NEW_PASS"
+sudo systemctl start meshcentral
+```
+
+> Username is whatever you typed when you first created the admin in the web
+> UI — usually `admin`. The email on the account is just a profile field, not
+> the login.
+
+**Verify:** open `https://$CONTROLLER_IP` and log in.
+
+---
+
+### 2.5 MeshCentral session key
+
+**What it does:** signs browser session cookies. Without a stable value, every
+service restart invalidates all logins.
+
+**Default:** placeholder string until set
+**Where:** `~/lab/meshcentral/meshcentral-data/config.json` → `settings.sessionKey`
+
+**Change it:**
+```bash
+NEW_KEY="$(openssl rand -hex 32)"
+python3 -c "
+import json, pathlib
+p = pathlib.Path.home() / 'lab/meshcentral/meshcentral-data/config.json'
+c = json.loads(p.read_text())
+c['settings']['sessionKey'] = '$NEW_KEY'
+p.write_text(json.dumps(c, indent=2))
+"
+sudo systemctl restart meshcentral
+```
+
+**Verify:**
+```bash
+python3 -c "
+import json, pathlib
+c = json.loads((pathlib.Path.home() / 'lab/meshcentral/meshcentral-data/config.json').read_text())
+print('sessionKey set:', bool(c['settings'].get('sessionKey')))
+"
+```
+
+> Rotating this **logs out every active session** — only do it intentionally
+> (e.g. after a suspected breach).
+
+---
+
+### 2.6 MeshCentral new account signups
+
+**What it does:** if `true`, anyone hitting the web UI can register an account.
+After you've claimed admin, set to `false`.
+
+**Default after our setup:** `false`
+**Where:** `~/lab/meshcentral/meshcentral-data/config.json` → `domains."".newAccounts`
+
+**Change it:**
+```bash
+ALLOW="false"   # or "true" temporarily to onboard a teammate
+
+python3 -c "
+import json, pathlib
+p = pathlib.Path.home() / 'lab/meshcentral/meshcentral-data/config.json'
+c = json.loads(p.read_text())
+c['domains']['']['newAccounts'] = ($ALLOW == 'true')
+p.write_text(json.dumps(c, indent=2))
+"
+sudo systemctl restart meshcentral
+```
+
+**Verify:** in an incognito browser, hit `https://$CONTROLLER_IP/` — the
+"Create Account" button should be absent when `false`.
+
+---
+
+### 2.7 MeshCentral HTTPS port
+
+**What it does:** the port the MeshCentral web UI listens on.
+
+**Default:** `443`
+**Where:** `~/lab/meshcentral/meshcentral-data/config.json` → `settings.port`
+(also `redirport` for the plain-HTTP redirect)
+
+**Change it:**
 ```bash
 NEW_HTTPS=8443
 NEW_HTTP=8080
 
-# 1. Edit MeshCentral config
-nano ~/lab/meshcentral/meshcentral-data/config.json
-# Inside "settings": "port": 8443, "redirport": 8080, "exactports": true
+# 1. Edit config
+python3 -c "
+import json, pathlib
+p = pathlib.Path.home() / 'lab/meshcentral/meshcentral-data/config.json'
+c = json.loads(p.read_text())
+c['settings']['port']      = $NEW_HTTPS
+c['settings']['redirport'] = $NEW_HTTP
+c['settings']['exactports'] = True
+p.write_text(json.dumps(c, indent=2))
+"
 
-# 2. Firewall
+# 2. Firewall — open new, close old
 sudo firewall-cmd --permanent --remove-port=443/tcp
 sudo firewall-cmd --permanent --remove-port=80/tcp
 sudo firewall-cmd --permanent --add-port=$NEW_HTTPS/tcp
 sudo firewall-cmd --permanent --add-port=$NEW_HTTP/tcp
 sudo firewall-cmd --reload
 
-# 3. Below 1024 needs setcap; above 1024 doesn't
-if [ "$NEW_HTTPS" -ge 1024 ]; then
-    sudo setcap -r "$(readlink -f $(command -v node))" 2>/dev/null
+# 3. If new port >= 1024 you no longer need cap_net_bind_service:
+if [ "$NEW_HTTPS" -ge 1024 ] && [ "$NEW_HTTP" -ge 1024 ]; then
+    sudo setcap -r "$(readlink -f $(command -v node))" 2>/dev/null || true
 fi
 
-# 4. Restart + regenerate agents (port is baked into the binary)
+# 4. Restart and re-stage agent (port is baked into the binary)
 sudo systemctl restart meshcentral
 sleep 5
 cp ~/lab/meshcentral/meshcentral-data/signedagents/MeshService64.exe ~/lab/files/
 ```
 
-Already-enrolled agents need re-pointing (similar to §6 step 4) with the new
-port in the URL.
+**Verify:**
+```bash
+ss -tlnp | grep -E ":$NEW_HTTPS|:$NEW_HTTP"
+curl -k -s -o /dev/null -w "HTTP %{http_code}\n" "https://$CONTROLLER_IP:$NEW_HTTPS"
+```
+
+> Already-enrolled agents still talk to the old port. Re-point them with the
+> `changeserver` ansible command from §2.1, using `wss://$CONTROLLER_IP:$NEW_HTTPS/agent.ashx`.
 
 ---
 
-## 8. Ansible setup
+### 2.8 MeshCentral branding (UI title)
 
-`ansible` lives at `~/.local/bin/ansible` — installed via `pip3 install --user`,
-not `dnf`. Reasons: Nobara's dnf repo doesn't always carry a recent ansible,
-and pip-user keeps it out of system locations.
+**What it does:** the text shown on the login screen and browser tab.
 
-### Verify
+**Default:** unset (MeshCentral default branding)
+**Where:** `~/lab/meshcentral/meshcentral-data/config.json` → `domains."".title`
+
+**Change it:**
 ```bash
-which ansible                                # → /home/abood/.local/bin/ansible
-ansible --version | head -1                  # → ansible [core 2.X.Y]
-python3 -c "import winrm; print('OK')"       # pywinrm
-ansible-galaxy collection list ansible.windows
+NEW_TITLE="INU Lab"
+
+python3 -c "
+import json, pathlib
+p = pathlib.Path.home() / 'lab/meshcentral/meshcentral-data/config.json'
+c = json.loads(p.read_text())
+c['domains']['']['title']  = '$NEW_TITLE'
+c['domains']['']['title2'] = 'Controller'
+p.write_text(json.dumps(c, indent=2))
+"
+sudo systemctl restart meshcentral
 ```
 
-### Upgrade
+**Verify:** refresh `https://$CONTROLLER_IP` — title shown on the login page.
+
+---
+
+### 2.9 systemd service — run-as user
+
+**What it does:** the OS account that owns the MeshCentral process.
+
+**Default:** `abood`
+**Where:** `/etc/systemd/system/meshcentral.service` → `User=`
+
+**Change it:**
+```bash
+NEW_USER="<linuxuser>"
+
+# 1. Make sure the user exists and owns the data dir
+sudo chown -R "$NEW_USER:$NEW_USER" ~/lab/meshcentral/meshcentral-data
+
+# 2. Patch the unit
+sudo sed -i "s|^User=.*|User=$NEW_USER|" /etc/systemd/system/meshcentral.service
+sudo sed -i "s|WorkingDirectory=/home/[^/]*|WorkingDirectory=/home/$NEW_USER|" /etc/systemd/system/meshcentral.service
+sudo sed -i "s|/home/[^/]*/lab|/home/$NEW_USER/lab|g" /etc/systemd/system/meshcentral.service
+
+# 3. Reload + restart
+sudo systemctl daemon-reload
+sudo systemctl restart meshcentral
+```
+
+**Verify:**
+```bash
+ps -o user= -p "$(systemctl show -p MainPID --value meshcentral)"
+```
+
+---
+
+### 2.10 Firewall ports
+
+**What it does:** which TCP ports firewalld allows inbound.
+
+**Default after install:** `80/tcp`, `443/tcp`
+**Where:** firewalld
+
+**Inspect:**
+```bash
+sudo firewall-cmd --list-all
+```
+
+**Open a port:**
+```bash
+sudo firewall-cmd --permanent --add-port=<PORT>/tcp
+sudo firewall-cmd --reload
+```
+
+**Close a port:**
+```bash
+sudo firewall-cmd --permanent --remove-port=<PORT>/tcp
+sudo firewall-cmd --reload
+```
+
+**Temporary (only until reboot):**
+```bash
+sudo firewall-cmd --add-port=8080/tcp   # used while 04_serve_files.sh is running
+```
+
+---
+
+### 2.11 Ansible — install / upgrade / config
+
+**What it does:** controls Ansible (installed via `pip3 install --user`).
+
+**Default location:** `~/.local/bin/ansible*`
+**Where:** PATH set in `config.env` and `~/.bashrc`
+
+**Upgrade Ansible:**
 ```bash
 pip3 install --user --upgrade ansible pywinrm
 ansible-galaxy collection install --upgrade ansible.windows community.windows
 ```
 
-### Add system-wide config (optional)
-
-Create `~/.ansible.cfg` to set defaults:
-```ini
+**Set defaults so commands are shorter (optional):**
+```bash
+cat > ~/.ansible.cfg <<'EOF'
 [defaults]
 inventory = /home/abood/lab/hosts.ini
 forks     = 50
@@ -326,146 +429,169 @@ stdout_callback = yaml
 [winrm]
 operation_timeout_sec = 60
 read_timeout_sec      = 70
+EOF
 ```
 
-With this in place, you can drop the `-i ~/lab/hosts.ini --forks 50` from
-every command.
+After this, `ansible lab -m win_ping` works without `-i ~/lab/hosts.ini --forks 50`.
 
----
-
-## 9. Firewall (firewalld)
-
+**Verify:**
 ```bash
-# What's open right now
-sudo firewall-cmd --list-all
-
-# Open MeshCentral defaults
-sudo firewall-cmd --permanent --add-port=443/tcp
-sudo firewall-cmd --permanent --add-port=80/tcp
-sudo firewall-cmd --reload
-
-# Open the file-server (only when 04_serve_files.sh is running)
-sudo firewall-cmd --add-port=8080/tcp        # not --permanent: temporary
-
-# Close a port
-sudo firewall-cmd --permanent --remove-port=443/tcp
-sudo firewall-cmd --reload
+which ansible && ansible --version | head -1
+python3 -c "import winrm; print('pywinrm OK')"
+ansible-galaxy collection list ansible.windows | tail -3
 ```
 
-If `firewall-cmd` is not installed (firewalld not active), check with
-`sudo systemctl status firewalld`. Some Nobara installs ship without it — in
-which case there's no host firewall to configure.
-
 ---
 
-## 10. Known inconsistencies (worth fixing)
+### 2.12 Backup the controller
 
-These are real gaps — `config.env` exports values that scripts ignore. If you
-change them, scripts that bypass `config.env` won't follow.
+**What it does:** snapshots `meshcentral-data/` (devices DB, users, certs).
 
-| Issue | Where | Fix |
-|---|---|---|
-| `LAB_RANGE_START` / `LAB_RANGE_END` not used by scan | [`02_add_devices.sh`](../02_add_devices.sh) line 16 hardcodes `SUBNET="10.3.5"` | Replace with: `SUBNET="${LAB_RANGE_START%.*}"` (derives `10.3.5` from `10.3.5.1`) |
-| `MESH_ADMIN` not used | (no script reads it) | Either consume it in [`01_install_server.sh`](../01_install_server.sh)'s end-of-install message, or delete the variable |
-| `LAB_PLAYBOOKS` not used | (no script reads it) | Cosmetic — leave or remove |
-| Inline `labadmin/2026` credentials in [`02_add_devices.sh`](../02_add_devices.sh) and [`03_check_lab.sh`](../03_check_lab.sh) | bypass `config.env` | If you ever rotate the lab admin password, `sed -i` both files (or move the creds to `config.env`) |
+**Where:** `~/lab/backups/`
 
----
-
-## 11. Backup the controller
-
+**Manual backup:**
 ```bash
-# Stop briefly to get a consistent DB snapshot
 sudo systemctl stop meshcentral
 mkdir -p ~/lab/backups
 tar czf ~/lab/backups/meshcentral-$(date +%F-%H%M).tgz \
   -C ~/lab/meshcentral meshcentral-data
 sudo systemctl start meshcentral
+ls -lh ~/lab/backups/
 ```
 
-What's in `meshcentral-data/`:
-- All device records + group memberships
-- All user accounts + 2FA secrets + sessionKey
-- Self-signed CA + per-host TLS certs (regenerating these breaks every
-  enrolled agent's trust)
-- Stats and event logs
-
-Schedule weekly:
+**Schedule weekly (Sunday 03:00):**
 ```bash
 crontab -e
-# Add:
-0 3 * * 0 cd /home/abood/lab && sudo systemctl stop meshcentral && tar czf backups/meshcentral-$(date +\%F).tgz -C meshcentral meshcentral-data && sudo systemctl start meshcentral
+# Add this line:
+# 0 3 * * 0 systemctl stop meshcentral && tar czf /home/abood/lab/backups/meshcentral-$(date +\%F).tgz -C /home/abood/lab/meshcentral meshcentral-data && systemctl start meshcentral
 ```
+(Cron runs as your user; the `systemctl` calls inside need the user to have
+NOPASSWD sudo for those commands, or run the cron under root.)
 
-Restoring on a new machine: complete Phases 0–1 of [`01_IMPLEMENTATION.md`](01_IMPLEMENTATION.md),
+**Restore on a new machine:** complete Phases 0–1 of `01_IMPLEMENTATION.md`,
 **stop the service**, replace `meshcentral-data/` with the tarball contents,
-start the service, then update the IP per §6 if it changed.
+start the service, then update IP per §2.1 if it changed.
 
 ---
 
-## 12. End-to-end "verify the controller is healthy" checklist
+## 3. Common scenarios (multi-setting changes)
+
+### Scenario A: deploy this whole stack to a *new* lab on a *new* Nobara box
+
+```bash
+# On the NEW box (with ~/lab/ copied or git-cloned over):
+nano ~/lab/config.env
+# → set CONTROLLER_IP, LAB_RANGE_START/END to match the new lab
+
+source ~/lab/config.env
+~/lab/01_install_server.sh
+# → opens MeshCentral on https://$CONTROLLER_IP
+
+# In a browser: claim the admin account, create the "Lab" device group.
+
+# Harden config.json (see §2.5 + §2.6) — set sessionKey + newAccounts:false.
+
+# Stage the server-keyed agent
+cp ~/lab/meshcentral/meshcentral-data/signedagents/MeshService64.exe ~/lab/files/
+
+# Walk to each Windows device with USB → run 01_Enroll-LabDevice.bat
+# Then back on the controller:
+~/lab/02_add_devices.sh
+~/lab/03_check_lab.sh
+python3 ~/lab/collect_macs.py
+```
+
+That's the full new-lab path. Each lab gets its own `config.env` and its own
+isolated MeshCentral; no two labs share state.
+
+---
+
+### Scenario B: the controller box's IP changed (DHCP rotation, network change)
+
+Run the full procedure in §2.1. Order matters: update `config.env` → update
+systemd unit → restart → re-stage agent → (optional) re-point existing agents.
+
+---
+
+### Scenario C: rotate the lab admin password before exams
+
+Run the full procedure in §2.3 → "Rotate the password (fleet-wide)". One block.
+
+---
+
+### Scenario D: move the whole lab to a new IP subnet
+
+```bash
+NEW_PREFIX="192.168.1"
+
+# 1. Update lab subnet bounds
+sed -i "s|^export LAB_RANGE_START=.*|export LAB_RANGE_START=\"$NEW_PREFIX.1\"|"   ~/lab/config.env
+sed -i "s|^export LAB_RANGE_END=.*|export LAB_RANGE_END=\"$NEW_PREFIX.254\"|"      ~/lab/config.env
+
+# 2. If the controller's own IP also moved, run §2.1 first
+
+# 3. Empty hosts.ini and re-discover everything
+> ~/lab/hosts.ini
+~/lab/02_add_devices.sh
+
+# 4. Verify
+~/lab/03_check_lab.sh
+```
+
+---
+
+### Scenario E: hand the lab off to a different Linux user account
+
+Run the full procedure in §2.9. Don't forget the `chown -R` on
+`meshcentral-data/`.
+
+---
+
+## 4. Health-check ladder (run after any change)
 
 ```bash
 source ~/lab/config.env
 
-# 1. config.env actually loaded
-echo "Controller IP from env: $CONTROLLER_IP"
+# 1. config loaded
+echo "IP=$CONTROLLER_IP  RANGE=$LAB_RANGE_START..$LAB_RANGE_END  USER=$LAB_ADMIN_USER"
 
 # 2. systemd
-systemctl is-enabled meshcentral
-systemctl is-active meshcentral
+systemctl is-active meshcentral && systemctl is-enabled meshcentral
 
-# 3. Ports
+# 3. ports
 ss -tlnp | grep -E ':443|:80|:4433'
 
-# 4. Web UI responding
-curl -k -s -o /dev/null -w "Web UI: HTTP %{http_code}\n" https://$CONTROLLER_IP
+# 4. web UI
+curl -k -s -o /dev/null -w "Web UI: HTTP %{http_code}\n" "https://$CONTROLLER_IP"
 
-# 5. config.json is hardened
+# 5. config.json hardened
 python3 -c "
-import json
-c = json.load(open('$HOME/lab/meshcentral/meshcentral-data/config.json'))
-sk = c['settings'].get('sessionKey', '')
-na = c['domains']['']
-print('sessionKey set:', bool(sk) and sk != 'MyReallySecretPassword1')
-print('newAccounts off:', na.get('newAccounts') is False)
+import json, pathlib
+c = json.loads((pathlib.Path.home()/'lab/meshcentral/meshcentral-data/config.json').read_text())
+print('sessionKey:', 'set' if c['settings'].get('sessionKey') else 'MISSING')
+print('newAccounts:', c['domains'][''].get('newAccounts', 'unset'))
 "
 
 # 6. Ansible reachable
-which ansible >/dev/null && ansible --version | head -1
+ansible --version | head -1
 
-# 7. Agent binary present and matches signedagents
-sha256sum ~/lab/files/MeshService64.exe \
-          ~/lab/meshcentral/meshcentral-data/signedagents/MeshService64.exe \
-          | awk '{print $1}' | sort -u | wc -l   # should print 1
-
-# 8. Inventory parseable
-ansible-inventory -i ~/lab/hosts.ini --list >/dev/null && echo "hosts.ini OK"
-
-# 9. Lab reachable
+# 7. Lab health
 ~/lab/03_check_lab.sh
 ```
 
-Any line that fails → fix that one before moving on.
+If any step fails, fix it before moving on. Each step maps cleanly back to one
+recipe in §2.
 
 ---
 
-## 13. What NOT to do
+## 5. Don'ts
 
-- **Don't `sudo systemctl restart meshcentral` without first validating
-  `config.json`** with `python3 -m json.tool < ...config.json`. A syntax error
-  takes the server down until you fix it manually.
-- **Don't delete `meshcentral-data/`** under any circumstance — the cert
-  authority lives there. Losing it means every enrolled agent has to be
-  reinstalled with a freshly-signed binary.
-- **Don't change `User=` in the systemd unit** without also `chown -R`'ing
-  `~/lab/meshcentral/meshcentral-data/` to the new user.
-- **Don't run MeshCentral as root.** The `setcap` on the node binary is the
-  reason it can bind 80/443 as user `abood`.
-- **Don't rotate the `sessionKey` casually.** Doing it forces every browser
-  session to log out and re-authenticate.
-- **Don't open MeshCentral to the public internet** without putting it behind
-  a real cert (Let's Encrypt) and a reverse proxy. The self-signed flow is
-  fine on a private lab network — not anywhere else.
-- **Don't edit the systemd unit file without `daemon-reload` after.** Your
-  edit will be ignored on the next restart.
+- Don't `restart meshcentral` without first validating `config.json`:
+  `python3 -m json.tool < ~/lab/meshcentral/meshcentral-data/config.json`
+- Don't delete `meshcentral-data/` — it holds the cert authority. Losing it
+  means every enrolled agent has to be reinstalled with a fresh binary.
+- Don't run MeshCentral as root. The `setcap` on the node binary is what lets
+  user `abood` bind 80/443.
+- Don't expose this server to the public internet without a real cert
+  (Let's Encrypt) and a reverse proxy.
+- Don't edit the systemd unit file without `daemon-reload` after.

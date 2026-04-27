@@ -14,8 +14,9 @@ echo "  Lab Health Check  ($(date '+%Y-%m-%d %H:%M:%S'))"
 echo "================================================================"
 echo ""
 
-# Inventory size
-TOTAL=$(grep -cE "^10\." ~/lab/hosts.ini || echo 0)
+# Inventory size — match the lab subnet derived from config.env
+SUBNET="${LAB_RANGE_START%.*}"
+TOTAL=$(grep -cE "^${SUBNET//./\\.}\." ~/lab/hosts.ini || echo 0)
 echo "Inventory size: $TOTAL devices"
 echo ""
 
@@ -48,8 +49,8 @@ if [ -s /tmp/lab_check_reachable.txt ]; then
         cat /tmp/lab_check_reachable.txt
         echo ""
         echo "[lab:vars]"
-        echo "ansible_user=labadmin"
-        echo "ansible_password=2026"
+        echo "ansible_user=$LAB_ADMIN_USER"
+        echo "ansible_password=$LAB_ADMIN_PASS"
         echo "ansible_connection=winrm"
         echo "ansible_winrm_transport=ntlm"
         echo "ansible_winrm_server_cert_validation=ignore"

@@ -14,6 +14,13 @@ Default values used throughout:
 - Lab device admin: `labadmin` / `2026`
 - MeshCentral admin: `admin`
 
+> **Already built? You're in the wrong file.**
+> This doc is for the first-time build of a fresh controller. For ongoing
+> adjustments (rotate password, change IP, move subnet, swap admin user, etc.)
+> use [`06_CONTROLLER_CONFIG.md`](06_CONTROLLER_CONFIG.md) — it's a per-setting
+> cookbook with copy-paste commands. Per-Windows-device settings live in
+> [`05_DEVICE_CONFIG.md`](05_DEVICE_CONFIG.md).
+
 ---
 
 ## Phase 0 — Prerequisites
@@ -419,6 +426,10 @@ Schedule weekly: `crontab -e`:
 
 If a teammate is rebuilding this on **their own machine** with a different IP,
 port, or lab subnet, here's exactly what to change.
+
+> For changes to an **already-running** controller (not a rebuild), prefer
+> [`06_CONTROLLER_CONFIG.md`](06_CONTROLLER_CONFIG.md) — same content but
+> organized as a per-setting cookbook with verification commands.
 
 ### 7.1 Change the controller IP
 
