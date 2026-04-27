@@ -31,6 +31,7 @@
 {"time":{"$$date":1777202772733},"nodeid":"node//jVluFWoMRdVnFnC9BZvUZcid$XpQULg14wx@meM7swgw3XHIr9nIugn3fEm0Bn07","power":1,"_id":"5ZyauqXcIPqfCMXF"}
 {"time":{"$$date":1777204104421},"nodeid":"node//GUICTId0gCpuFvQZGmSHmDFB9RxuW$EoBQ5AgO8qgZgOxvDrE6@RcPrHxF0WN79Y","power":1,"_id":"5bRfN26IZBd6ZxHK"}
 {"time":{"$$date":1777116391926},"nodeid":"node//LZlBIpbCKYmCfaNQ9AncAhSipe4@y1jOUpyhirhdMzWd9Ocq$s$MsgCsMu2di7SH","power":0,"oldPower":1,"_id":"5iZHXk82ecrDIJji"}
+{"time":{"$$date":1777250658359},"nodeid":"*","power":0,"s":1,"_id":"5kZ9wcfz6wRiIPHz"}
 {"time":{"$$date":1777202771370},"nodeid":"node//CRJe1qZIPybqcSX2MTcDvwA@27mEbe2NYhb$czPjXpZzJH5j1voipuhSwxb1gLnK","power":1,"_id":"60vmQfVC2Nc2MKc1"}
 {"time":{"$$date":1777108842371},"nodeid":"node//H6PnWbK2ovqPLSurTnRnfrvAFF@ZfheeGhnE19KqS7MpcIBsEKU6jAdJBmJQ20Kk","power":0,"oldPower":1,"_id":"6GK3bMxsqgRs8LYT"}
 {"time":{"$$date":1777115114020},"nodeid":"node//CRJe1qZIPybqcSX2MTcDvwA@27mEbe2NYhb$czPjXpZzJH5j1voipuhSwxb1gLnK","power":1,"_id":"6TsluFDikAeTPl4N"}
@@ -93,6 +94,7 @@
 {"time":{"$$date":1777116222929},"nodeid":"node//CRJe1qZIPybqcSX2MTcDvwA@27mEbe2NYhb$czPjXpZzJH5j1voipuhSwxb1gLnK","power":1,"_id":"HDCnIDamdFhVLNA9"}
 {"time":{"$$date":1777204261991},"nodeid":"node//m2qBaJJEJyDkKc7nh5yNn9HIxE5o37@pFDmgRISPYhtFfatu819h3a$bQN6rbYdj","power":0,"oldPower":1,"_id":"HJ4gzsuWzTeR7tBo"}
 {"time":{"$$date":1777202771130},"nodeid":"node//m2qBaJJEJyDkKc7nh5yNn9HIxE5o37@pFDmgRISPYhtFfatu819h3a$bQN6rbYdj","power":1,"_id":"HLlYuFHhtxP7f743"}
+{"time":{"$$date":1777227967255},"nodeid":"*","power":0,"s":1,"_id":"HUaorCR8nKpznSx7"}
 {"time":{"$$date":1777108842698},"nodeid":"node//C2nLNyLQ62OA2l7Wl59grkAmhSWt0N2tQkwEDTBcQWKVVGZ1Fo0Hzg4R4@W7EpR7","power":0,"oldPower":1,"_id":"Hu3pzep7o26VEhps"}
 {"time":{"$$date":1777204319120},"nodeid":"node//u0MveL74D15xpG1OpcOYIXcnfKNsrfvyo6ycAH6Dgh0TjbH$37hkx@rGr27Jqu6X","power":1,"_id":"HvFpHVtsDxoxnOgR"}
 {"time":{"$$date":1777202770805},"nodeid":"node//WYKUdh$EDqPD$@YbAhr@9DM6eDJ3Vt2sjBLpt7S9hv46zQUngmbgTAS75@xbqO22","power":1,"_id":"I8eDqBbmVUxE87R9"}
@@ -170,6 +172,7 @@
 {"time":{"$$date":1777108712707},"nodeid":"node//G7g@pFu33vvIpAwIJ7EaA82wFndheA66RIzeEaKe9eFn7pIB5KgJ0D09azP9XIhL","power":1,"_id":"W0Y3A3sTdcL88oFo"}
 {"time":{"$$date":1777204078224},"nodeid":"node//jE0jPoIKdLAodZQvOJylAzfP93S9FVJX1n3t9HGWF@XU9JmXwsGlz5LEKMg@r3Md","power":1,"oldPower":7,"_id":"W1pEuryyHTjoWqMj"}
 {"time":{"$$date":1777111649659},"nodeid":"node//H6PnWbK2ovqPLSurTnRnfrvAFF@ZfheeGhnE19KqS7MpcIBsEKU6jAdJBmJQ20Kk","power":1,"_id":"W84ewZYFxMXgZfTx"}
+{"time":{"$$date":1777219604203},"nodeid":"*","power":0,"s":1,"_id":"WFUAQGqb7CUvOfWu"}
 {"time":{"$$date":1777202305126},"nodeid":"node//jE0jPoIKdLAodZQvOJylAzfP93S9FVJX1n3t9HGWF@XU9JmXwsGlz5LEKMg@r3Md","power":7,"_id":"WGWk23MYtx8AF0q7"}
 {"time":{"$$date":1777106035183},"nodeid":"node//T7wnXV@fdzvwe9ZleW28u199ni6CJOa6HzYrdeAWiWoT3r74boFAi$I77hmG3ZSC","power":0,"oldPower":1,"_id":"WPLuCjdExyxcElDp"}
 {"time":{"$$date":1777204090689},"nodeid":"node//WYKUdh$EDqPD$@YbAhr@9DM6eDJ3Vt2sjBLpt7S9hv46zQUngmbgTAS75@xbqO22","power":1,"_id":"WVmKX9klALgarPPN"}
@@ -181,6 +184,7 @@
 {"time":{"$$date":1777205513558},"nodeid":"node//u0MveL74D15xpG1OpcOYIXcnfKNsrfvyo6ycAH6Dgh0TjbH$37hkx@rGr27Jqu6X","power":0,"oldPower":1,"_id":"XYbyBMog5LTAGXc5"}
 {"time":{"$$date":1777202309765},"nodeid":"node//4lPIijxm0z58EKXP7MjfpooLBI9RjpWP34aKDKCeYuR1ovokHGLjhSC5$nkBXLtI","power":1,"_id":"XiX7eijHf4FEubWY"}
 {"time":{"$$date":1777202617852},"nodeid":"node//jE0jPoIKdLAodZQvOJylAzfP93S9FVJX1n3t9HGWF@XU9JmXwsGlz5LEKMg@r3Md","power":1,"oldPower":7,"_id":"XmvZLCf99Mudp5wy"}
+{"time":{"$$date":1777226481178},"nodeid":"*","power":0,"s":1,"_id":"YFgBF6Ddd7CkdnAS"}
 {"time":{"$$date":1777106000123},"nodeid":"node//C2nLNyLQ62OA2l7Wl59grkAmhSWt0N2tQkwEDTBcQWKVVGZ1Fo0Hzg4R4@W7EpR7","power":0,"oldPower":1,"_id":"YOweb8zlbVKb6HSu"}
 {"time":{"$$date":1777104439502},"nodeid":"node//@uZ1@8phA9BQHXt$Q24TygGobq87xlHEXQp9JrZE01fr9TEv8LR773Izt4eAdIJG","power":1,"_id":"YYLtcY6xpLzxdEPq"}
 {"time":{"$$date":1777108938435},"nodeid":"node//m2qBaJJEJyDkKc7nh5yNn9HIxE5o37@pFDmgRISPYhtFfatu819h3a$bQN6rbYdj","power":1,"_id":"YxVZJQV93ybbvWRc"}
@@ -280,6 +284,7 @@
 {"time":{"$$date":1777203858795},"nodeid":"node//G7g@pFu33vvIpAwIJ7EaA82wFndheA66RIzeEaKe9eFn7pIB5KgJ0D09azP9XIhL","power":1,"_id":"qrnsW3AjQxy69R4U"}
 {"time":{"$$date":1777202768811},"nodeid":"node//jE0jPoIKdLAodZQvOJylAzfP93S9FVJX1n3t9HGWF@XU9JmXwsGlz5LEKMg@r3Md","power":7,"_id":"r73w273qEumUTSSK"}
 {"time":{"$$date":1777202618953},"nodeid":"node//jVluFWoMRdVnFnC9BZvUZcid$XpQULg14wx@meM7swgw3XHIr9nIugn3fEm0Bn07","power":1,"_id":"rTVqP5qCf2VPhTZE"}
+{"time":{"$$date":1777218467327},"nodeid":"*","power":0,"s":1,"_id":"rWSUiOFHEzGvm50O"}
 {"time":{"$$date":1777108899876},"nodeid":"node//H6PnWbK2ovqPLSurTnRnfrvAFF@ZfheeGhnE19KqS7MpcIBsEKU6jAdJBmJQ20Kk","power":1,"_id":"rkec9Vzl0cOqxFGL"}
 {"time":{"$$date":1777116156576},"nodeid":"node//6F$fYgamT2Qm@1AdqkEz7SxC$uj18y$SEz1B3fV55GUJEhWU4RI5Ww01IfSUPESg","power":0,"oldPower":1,"_id":"s26BZgHA42yOiIhc"}
 {"time":{"$$date":1777116225126},"nodeid":"node//Bc5pqfxhcG$L3MDRIBubA0fuAWLos5B91M3AbFhTP86HZi01q@5ZdgRUYAKjkPHo","power":1,"_id":"sLXYyF0rgHs1b3r9"}
@@ -311,6 +316,7 @@
 {"time":{"$$date":1777113066177},"nodeid":"node//Pf5g8Mf7gMkLf50694geiphaaJM6CcqlK32omvAmIefKhyCYD2EnTyKzhJ6HOy9M","power":0,"oldPower":1,"_id":"wrqTb6FBffXV4lsM"}
 {"time":{"$$date":1777116155434},"nodeid":"node//xNUCCD2qvycuYnRfM4AEterOkTQRJtLJmoVnfKiubGtwsIiW5cdFCQrgcTAcFBE8","power":0,"oldPower":1,"_id":"wsImfhfofgSK3tcD"}
 {"time":{"$$date":1777106699633},"nodeid":"node//7z4hlPhwj9dGwfMvo8ZLD$yT5cxTIQ5mbbg675@DRbKId1un@CprGW8X9JTU31q@","power":0,"oldPower":1,"_id":"wwpw5CUGzi9oKEVz"}
+{"time":{"$$date":1777248508113},"nodeid":"*","power":0,"s":1,"_id":"x0inVZhxgLS7YHBS"}
 {"time":{"$$date":1777111160576},"nodeid":"node//H6PnWbK2ovqPLSurTnRnfrvAFF@ZfheeGhnE19KqS7MpcIBsEKU6jAdJBmJQ20Kk","power":1,"_id":"x6elh4ECotBkvNJI"}
 {"time":{"$$date":1777116615372},"nodeid":"node//O0tx1UAHFOKOk7KZsZDUgNxDj3h@z@NzaOqseZTbJJAlBy4U5Mf1md3CfByCfr9u","power":0,"oldPower":1,"_id":"x9SWexcoDtl6B5qZ"}
 {"time":{"$$date":1777113070595},"nodeid":"node//xNUCCD2qvycuYnRfM4AEterOkTQRJtLJmoVnfKiubGtwsIiW5cdFCQrgcTAcFBE8","power":1,"_id":"xEXw8hPpHCy3rSJu"}
@@ -340,4 +346,4 @@
 {"$$indexCreated":{"fieldName":"time","unique":false,"sparse":false}}
 {"$$indexCreated":{"fieldName":"nodeid"}}
 {"$$indexCreated":{"fieldName":"time","expireAfterSeconds":864000}}
-{"time":{"$$date":1777218467327},"nodeid":"*","power":0,"s":1,"_id":"rWSUiOFHEzGvm50O"}
+{"time":{"$$date":1777304889086},"nodeid":"*","power":0,"s":1,"_id":"qc6Uiw4bpp0wYuqq"}

@@ -134,3 +134,4 @@
 {"$$indexCreated":{"fieldName":"nodeid","sparse":true}}
 {"$$indexCreated":{"fieldName":"email","sparse":true}}
 {"_id":"SchemaVersion","value":2}
+{"_id":"LastAutoBackupTime","value":1777309915061}
