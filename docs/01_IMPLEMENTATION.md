@@ -11,7 +11,7 @@ ip -4 addr show | grep -oP '(?<=inet\s)\d+\.\d+\.\d+\.\d+' | grep -v '^127\.'
 Default values used throughout:
 - Controller IP: `10.3.5.96`
 - Lab subnet: `10.3.5.0/24`
-- Lab device admin: `labadmin` / `2026`
+- Lab device admin: `INU` / `2026`
 - MeshCentral admin: `admin`
 
 > **Already built? You're in the wrong file.**
@@ -35,12 +35,33 @@ paths if different.
 
 ```bash
 cd ~
-git clone <repo-url> lab          # or rsync/copy from another machine
+git clone <repo-url> lab
 cd ~/lab
 ```
 
-`~/lab/` should contain `config.env`, `hosts.ini`, the four numbered shell
-scripts, `playbooks/`, `windows-scripts/`, `meshcentral/`, and `docs/`.
+A fresh clone contains: the four numbered shell scripts (`01_install_server.sh`,
+`02_add_devices.sh`, `03_check_lab.sh`, `04_serve_files.sh`), `playbooks/`,
+`windows-scripts/`, `docs/`, `collect_macs.py`, `config.env.example`, and a
+`.gitignore`.
+
+It does **not** contain `meshcentral/`, `hosts.ini`, `config.env`, `macs.txt`,
+or `files/MeshService64.exe` — those are runtime / per-controller data and are
+gitignored. They get generated on this box by the steps below.
+
+### 0.2a Create your local config
+
+```bash
+cp config.env.example config.env
+$EDITOR config.env
+```
+
+Set:
+- `CONTROLLER_IP` — this box's lab-network IPv4
+- `LAB_RANGE_START` / `LAB_RANGE_END` — your lab subnet bounds
+- `LAB_ADMIN_PASS` — password used by Ansible to authenticate to every Windows
+  device. **Must match** the `$pass` literal inside
+  [`windows-scripts/01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1)
+  (default `2026`). If you change one, change both.
 
 ### 0.3 Install runtime dependencies
 
@@ -207,18 +228,24 @@ Get-ChildItem -Path D:\ -Recurse -Include *.bat,*.ps1 | Unblock-File
 3. Wait for green `[OK]` lines and the final state readout
 4. Verify the readout shows:
    - `WinRM: Running, Automatic`
-   - `labadmin` listed under Administrators
+   - `INU` listed under Administrators
 5. Eject and move to next device
 
 What this does on each device:
-- Creates local user `labadmin` (password `2026`); updates if exists
-- Adds `labadmin` to Administrators
+- Creates local user `INU` (password `2026`); updates if exists
+- Adds `INU` to Administrators
+- **Deletes every other local user** (Administrator / Guest / DefaultAccount /
+  WDAGUtilityAccount and the running user are skipped)
 - `Enable-PSRemoting -Force`, sets WinRM to Automatic, starts service
 - Sets `WSMan:\localhost\Client\TrustedHosts = *`
 - Opens firewall TCP 5985
 
-The existing student account and any pre-existing lockdown policies are
-**untouched**.
+> **Heads up — destructive on existing accounts.** This is intentional: the lab
+> wants exactly one admin per device. Profile folders under `C:\Users\<name>\`
+> are NOT removed (no risk of nuking student data on disk), but the *accounts*
+> are gone. If you need to keep a specific user, edit the `$builtIn` allowlist
+> in [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1)
+> before running.
 
 ---
 
@@ -233,7 +260,7 @@ The existing student account and any pre-existing lockdown policies are
 Flow:
 1. TCP-scans `10.3.5.0/24` for hosts with port 5985 open
 2. Diffs against current [`hosts.ini`](../hosts.ini) to find new hosts
-3. Tests Ansible auth (`labadmin/2026`) on the new ones
+3. Tests Ansible auth (`INU/2026`) on the new ones
 4. Shows the list and asks for confirmation
 5. Runs [`playbooks/01_enroll_with_unlock.yml`](../playbooks/01_enroll_with_unlock.yml)
 6. Merges the successful hosts into `hosts.ini`
@@ -385,7 +412,7 @@ unwanted users in the UI.
 ### A device won't accept Ansible auth
 Run on the device locally (as Admin):
 ```powershell
-Get-LocalUser labadmin
+Get-LocalUser INU
 ```
 Missing or wrong password → re-run `01_Enroll-LabDevice.bat` on that device.
 
@@ -540,7 +567,7 @@ or replace the IPs manually.
 
 ### 7.4 Change the lab device admin credentials
 
-Default: `labadmin / 2026`.
+Default: `INU / 2026`.
 
 #### Step 1 — Update [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1)
 Edit the variables at the top:
@@ -561,7 +588,7 @@ Run the modified `01_Enroll-LabDevice.bat` on each device. The script handles
 "user already exists" by updating the password.
 
 #### Step 4 — Update inline inventories
-Search for `labadmin` and `2026` in [`02_add_devices.sh`](../02_add_devices.sh),
+Search for `INU` and `2026` in [`02_add_devices.sh`](../02_add_devices.sh),
 [`03_check_lab.sh`](../03_check_lab.sh), and [`collect_macs.py`](../collect_macs.py)
 — each has an inline credentials block that needs the same values.
 

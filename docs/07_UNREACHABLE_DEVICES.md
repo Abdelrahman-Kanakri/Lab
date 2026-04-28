@@ -82,7 +82,7 @@ Read the output:
 | `SUCCESS` (works on retry) | Transient — the host was busy or mid-handshake. Just re-run `02_add_devices.sh`. |
 | `UNREACHABLE … Read timed out` | Port 5985 is open but WinRM is not answering. The service crashed, or the network profile flipped to "Public". → §5 |
 | `UNREACHABLE … connection refused` | WinRM is fully down (service stopped, or firewall closed the port). → §5 |
-| `FAILED … access is denied / 401` | `labadmin` account is missing or password mismatch. → §6 |
+| `FAILED … access is denied / 401` | `INU` account is missing or password mismatch. → §6 |
 | `UNREACHABLE … No route to host` | Host is actually offline / different subnet. → §7 |
 
 ---
@@ -111,7 +111,7 @@ made to the device. So nothing that breaks WinRM affects MeshCentral:
 - Port 5985 closed? Doesn't matter — Mesh uses 443 outbound.
 - WinRM service crashed? Mesh Agent is a separate service.
 - Network profile flipped to "Public"? Outbound traffic still works.
-- `labadmin` password wrong / account locked? Mesh runs as `SYSTEM`, no login.
+- `INU` password wrong / account locked? Mesh runs as `SYSTEM`, no login.
 
 ### When MeshCentral works (and when it doesn't)
 
@@ -175,23 +175,23 @@ Get `<DEVICE_NODE_ID>` from `… meshctrl.js ListDevices`.
 ### Path C — physical access
 If Mesh Agent is also dead, you'll have to walk to the machine. Plug in the
 USB and re-run `Enroll-LabDevice.bat` — it resets WinRM, the firewall rule,
-and the `labadmin` account in one shot.
+and the `INU` account in one shot.
 
 ---
 
 ## 6. Fix a host where authentication fails (401 / access denied)
 
-The `labadmin` account is either missing, has the wrong password, or got
+The `INU` account is either missing, has the wrong password, or got
 locked out. Walk to the device (or use MeshCentral terminal) and run:
 
 ```powershell
 $pass = ConvertTo-SecureString "2026" -AsPlainText -Force
 
-if (Get-LocalUser -Name labadmin -ErrorAction SilentlyContinue) {
-    Set-LocalUser -Name labadmin -Password $pass
+if (Get-LocalUser -Name INU -ErrorAction SilentlyContinue) {
+    Set-LocalUser -Name INU -Password $pass
 } else {
-    New-LocalUser -Name labadmin -Password $pass -PasswordNeverExpires -AccountNeverExpires
-    Add-LocalGroupMember -Group "Administrators" -Member labadmin
+    New-LocalUser -Name INU -Password $pass -PasswordNeverExpires -AccountNeverExpires
+    Add-LocalGroupMember -Group "Administrators" -Member INU
 }
 ```
 
@@ -263,8 +263,8 @@ Confirm with the health check:
 | Network profile flipped to "Public" | `Read timed out` or refused | §5 — `Set-NetConnectionProfile -NetworkCategory Private` |
 | Machine doing heavy Windows Update | Times out, then works later | Wait 30 min, retry |
 | Firewall rule deleted | Connection refused on 5985 | Re-run `Enroll-LabDevice.bat` |
-| `labadmin` account renamed/deleted | 401 access denied | §6 |
-| `labadmin` password rotated on device only | 401 access denied | §6 with current password |
+| `INU` account renamed/deleted | 401 access denied | §6 |
+| `INU` password rotated on device only | 401 access denied | §6 with current password |
 | Host re-imaged | New MAC, possibly new IP | §7 — find by MAC |
 | Host genuinely offline | All ports closed | Power on the box |
 | **Brand-new device, first enrollment failed** | Any error in Step 5 | §4 — Mesh Agent isn't installed yet, walk to device with USB |

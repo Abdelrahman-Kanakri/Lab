@@ -54,7 +54,7 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-echo "[6/7] Opening firewall ports 80/443..."
+echo "[6/8] Opening firewall ports 80/443..."
 if command -v firewall-cmd >/dev/null 2>&1; then
     sudo firewall-cmd --permanent --add-port=443/tcp
     sudo firewall-cmd --permanent --add-port=80/tcp
@@ -63,11 +63,25 @@ else
     echo "    firewalld not found, skipping"
 fi
 
-echo "[7/7] Enabling and starting MeshCentral..."
+echo "[7/8] Enabling and starting MeshCentral..."
 sudo systemctl daemon-reload
 sudo systemctl enable --now meshcentral
 sleep 3
 sudo systemctl status meshcentral --no-pager | head -15
+
+echo "[8/8] Staging signed agent for device pushes..."
+mkdir -p "$LAB_FILES"
+SIGNED_AGENT="$MESH_DIR/meshcentral-data/signedagents/MeshService64.exe"
+if [ -f "$SIGNED_AGENT" ]; then
+    cp "$SIGNED_AGENT" "$LAB_FILES/MeshService64.exe"
+    echo "    copied MeshService64.exe -> $LAB_FILES/"
+else
+    echo "    WARNING: signed agent not found yet."
+    echo "    It is generated the first time MeshCentral runs. Wait ~30s for"
+    echo "    the service to come up, then re-run this script, or copy it"
+    echo "    manually:"
+    echo "      cp $SIGNED_AGENT $LAB_FILES/"
+fi
 
 echo ""
 echo "==================================================================="

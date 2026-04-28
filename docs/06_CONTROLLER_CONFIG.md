@@ -120,10 +120,10 @@ or manually edit `hosts.ini`.
 
 ### 2.3 Lab device admin credentials
 
-**What it does:** the local Windows admin (`labadmin/2026` by default) created
+**What it does:** the local Windows admin (`INU/2026` by default) created
 on every device by the enrollment USB. Ansible uses these creds to connect.
 
-**Default:** `LAB_ADMIN_USER=labadmin`, `LAB_ADMIN_PASS=2026`
+**Default:** `LAB_ADMIN_USER=INU`, `LAB_ADMIN_PASS=2026`
 **Where:** `config.env` + `windows-scripts/01_Enroll-LabDevice.ps1` + `hosts.ini` (auto-regenerated)
 
 **Change the username:**

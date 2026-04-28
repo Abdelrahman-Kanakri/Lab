@@ -15,7 +15,7 @@ Every lab device, after a clean enrollment, is in this state:
 
 | Area | Setting | Default value | Set by |
 |---|---|---|---|
-| **Identity** | Local admin user | `labadmin` | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
+| **Identity** | Local admin user | `INU` | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
 | **Identity** | Local admin password | `2026` | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
 | **Identity** | All other local users password | `2026` | [`04_Reset-Passwords.ps1`](../windows-scripts/04_Reset-Passwords.ps1) |
 | **Remote mgmt** | WinRM service | Running, Automatic startup | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
@@ -73,14 +73,14 @@ devices, and how to verify.
 #### Where to change
 [`windows-scripts/01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1):
 ```powershell
-$user = "labadmin"
+$user = "INU"
 $pass = ConvertTo-SecureString "2026" -AsPlainText -Force
 ```
 
 [`hosts.ini`](../hosts.ini):
 ```ini
 [lab:vars]
-ansible_user=labadmin
+ansible_user=INU
 ansible_password=2026
 ```
 
@@ -93,7 +93,7 @@ Also update the inline credentials in:
 ```bash
 source ~/lab/config.env
 ansible lab -i ~/lab/hosts.ini -m win_user \
-  -a "name=labadmin password=NewPassword update_password=always password_never_expires=yes groups=Administrators" \
+  -a "name=INU password=NewPassword update_password=always password_never_expires=yes groups=Administrators" \
   --forks 50
 # Then update hosts.ini with the new password and re-test:
 ansible lab -i ~/lab/hosts.ini -m win_ping --forks 50
@@ -103,7 +103,7 @@ ansible lab -i ~/lab/hosts.ini -m win_ping --forks 50
 ```bash
 ansible lab -i ~/lab/hosts.ini -m win_ping --forks 50
 # Or on a single device:
-ansible <ip> -i ~/lab/hosts.ini -m win_shell -a "Get-LocalUser labadmin | Format-List Name,Enabled,PasswordExpires"
+ansible <ip> -i ~/lab/hosts.ini -m win_shell -a "Get-LocalUser INU | Format-List Name,Enabled,PasswordExpires"
 ```
 
 ---
@@ -371,7 +371,7 @@ HOST=10.3.5.NEW
 
 ansible $HOST -i ~/lab/hosts.ini -m win_shell -a @"
 Write-Host '--- Identity ---'
-Get-LocalUser labadmin | Format-List Name,Enabled,PasswordExpires
+Get-LocalUser INU | Format-List Name,Enabled,PasswordExpires
 Write-Host '--- WinRM ---'
 Get-Service WinRM | Format-List Name,Status,StartType
 Write-Host '--- Mesh Agent ---'
@@ -410,7 +410,7 @@ ansible 10.3.5.X -i ~/lab/hosts.ini -m win_shell \
 # Rotate the lab admin password fleet-wide
 NEWPW='Spring2026!'
 ansible lab -i ~/lab/hosts.ini -m win_user \
-  -a "name=labadmin password=$NEWPW update_password=always password_never_expires=yes" --forks 50
+  -a "name=INU password=$NEWPW update_password=always password_never_expires=yes" --forks 50
 sed -i "s/^ansible_password=.*/ansible_password=$NEWPW/" ~/lab/hosts.ini
 
 # Push a new wallpaper to all devices
@@ -436,7 +436,7 @@ ansible lab -i ~/lab/hosts.ini -m win_command -a "shutdown /r /t 0" --forks 50
   `02_Run-Lock.bat`. Edit the script instead.
 - **Don't mix sleep and shutdown profiles** on different devices — operators
   will assume one model.
-- **Don't change `labadmin` to a domain account.** The whole flow assumes a
+- **Don't change `INU` to a domain account.** The whole flow assumes a
   local admin; switching to a domain account requires re-doing WinRM auth,
   the playbook, and `hosts.ini`.
 - **Don't disable WinRM after enrollment** — Ansible loses the device.

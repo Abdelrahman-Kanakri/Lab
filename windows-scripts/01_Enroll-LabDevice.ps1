@@ -1,8 +1,17 @@
 # ============================================================
 # Enroll-LabDevice.ps1
 # Run via Enroll-LabDevice.bat (self-elevates).
-# Creates labadmin/2026, enables WinRM, opens firewall.
-# Existing user accounts and lockdown policies are untouched.
+#
+# What it does (in order):
+#   1. Creates / updates a single local admin: INU / 2026
+#   2. Deletes EVERY other non-built-in local user account
+#      (Administrator, Guest, DefaultAccount, WDAGUtilityAccount stay)
+#   3. Enables WinRM (Automatic startup)
+#   4. Opens firewall TCP 5985
+#
+# After this script, the only usable local account on the device is INU.
+# Profile folders under C:\Users\<name>\ are NOT removed; clean those by
+# hand if you want the disk space back.
 # ============================================================
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")) {
@@ -10,23 +19,23 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 
 function Write-Step($n, $t, $m) { Write-Host "`n[$n/$t] $m" -ForegroundColor Yellow }
-function Write-OK($m) { Write-Host "  [OK] $m" -ForegroundColor Green }
-function Write-Item($m) { Write-Host "       $m" -ForegroundColor DarkGray }
-function Write-Fail($m) { Write-Host "  [!!] $m" -ForegroundColor Red }
+function Write-OK($m)            { Write-Host "  [OK] $m"      -ForegroundColor Green }
+function Write-Item($m)          { Write-Host "       $m"      -ForegroundColor DarkGray }
+function Write-Fail($m)          { Write-Host "  [!!] $m"      -ForegroundColor Red }
 
 Write-Host ""
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host "    Lab Device - ENROLL                      " -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
 
-$TotalSteps = 5
+$TotalSteps = 6
 
 # ============================================================
-# STEP 1: Create or update labadmin user
+# STEP 1: Create or update INU
 # ============================================================
-Write-Step 1 $TotalSteps "Creating/updating labadmin user..."
+Write-Step 1 $TotalSteps "Creating/updating INU user..."
 
-$user = "labadmin"
+$user = "INU"
 $pass = ConvertTo-SecureString "2026" -AsPlainText -Force
 
 try {
@@ -37,7 +46,7 @@ try {
     } else {
         New-LocalUser -Name $user -Password $pass `
             -PasswordNeverExpires -AccountNeverExpires `
-            -FullName "Lab Admin" -Description "Created by Enroll-LabDevice.ps1" | Out-Null
+            -FullName "INU Lab Admin" -Description "Created by Enroll-LabDevice.ps1" | Out-Null
         Write-OK "Created user: $user"
     }
 } catch {
@@ -46,9 +55,9 @@ try {
 }
 
 # ============================================================
-# STEP 2: Add to Administrators group
+# STEP 2: Add INU to Administrators
 # ============================================================
-Write-Step 2 $TotalSteps "Adding labadmin to Administrators group..."
+Write-Step 2 $TotalSteps "Adding $user to Administrators group..."
 
 try {
     Add-LocalGroupMember -Group "Administrators" -Member $user -ErrorAction Stop
@@ -62,9 +71,39 @@ try {
 }
 
 # ============================================================
-# STEP 3: Enable WinRM
+# STEP 3: Delete every other local user
+# Built-in accounts and the currently-running user are skipped.
 # ============================================================
-Write-Step 3 $TotalSteps "Enabling WinRM..."
+Write-Step 3 $TotalSteps "Removing all other local users..."
+
+$builtIn = @('Administrator', 'Guest', 'DefaultAccount', 'WDAGUtilityAccount')
+$running = $env:USERNAME
+$keep    = @($user) + $builtIn + @($running) | Sort-Object -Unique
+
+$victims = Get-LocalUser | Where-Object { $keep -notcontains $_.Name }
+
+if (-not $victims) {
+    Write-OK "No other local users to remove."
+} else {
+    foreach ($v in $victims) {
+        try {
+            Remove-LocalUser -Name $v.Name -ErrorAction Stop
+            Write-OK "Deleted: $($v.Name)"
+        } catch {
+            Write-Fail "Could not delete $($v.Name): $_"
+        }
+    }
+}
+
+if ($running -ne $user -and $builtIn -notcontains $running) {
+    Write-Item "Skipped '$running' because the script is currently running as that user."
+    Write-Item "Log out, sign in as $user, and re-run to remove '$running' as well."
+}
+
+# ============================================================
+# STEP 4: Enable WinRM
+# ============================================================
+Write-Step 4 $TotalSteps "Enabling WinRM..."
 
 try {
     Enable-PSRemoting -Force -SkipNetworkProfileCheck | Out-Null
@@ -77,9 +116,9 @@ try {
 }
 
 # ============================================================
-# STEP 4: Firewall rule for WinRM
+# STEP 5: Firewall rule for WinRM
 # ============================================================
-Write-Step 4 $TotalSteps "Opening firewall port 5985..."
+Write-Step 5 $TotalSteps "Opening firewall port 5985..."
 
 try {
     if (-not (Get-NetFirewallRule -Name "WinRM-HTTP-Lab" -ErrorAction SilentlyContinue)) {
@@ -95,13 +134,16 @@ try {
 }
 
 # ============================================================
-# STEP 5: Final state report
+# STEP 6: Final state report
 # ============================================================
-Write-Step 5 $TotalSteps "Final state..."
+Write-Step 6 $TotalSteps "Final state..."
 
 Write-Host ""
 Write-Host "  --- WinRM service ---" -ForegroundColor Cyan
 Get-Service WinRM | Format-Table Name, Status, StartType -AutoSize
+
+Write-Host "  --- Local users ---" -ForegroundColor Cyan
+Get-LocalUser | Format-Table Name, Enabled -AutoSize
 
 Write-Host "  --- Administrators ---" -ForegroundColor Cyan
 Get-LocalGroupMember -Group "Administrators" | Format-Table Name -AutoSize

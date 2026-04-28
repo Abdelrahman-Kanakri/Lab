@@ -108,7 +108,7 @@ After you've physically run [Enroll-LabDevice.bat](../windows-scripts/Enroll-Lab
 ```
 [1/6] Scan 10.3.5.0/24 for WinRM (port 5985)
 [2/6] Diff against ~/lab/hosts.ini → find what's new
-[3/6] Test labadmin/2026 auth on the new hosts
+[3/6] Test INU/2026 auth on the new hosts
 [4/6] Show you the list and ask to proceed (y/N)
 [5/6] Run enroll_with_unlock.yml on confirmed-working hosts
 [6/6] Merge them into ~/lab/hosts.ini
@@ -136,7 +136,7 @@ After you've physically run [Enroll-LabDevice.bat](../windows-scripts/Enroll-Lab
       10.3.5.88
       10.3.5.110
 
-[3/6] Testing labadmin/2026 auth on the 4 new hosts...
+[3/6] Testing INU/2026 auth on the 4 new hosts...
     auth OK on 4  /  failed on 0
 
 [4/6] Ready to enroll these in MeshCentral:
@@ -164,7 +164,7 @@ Proceed with enrollment? [y/N] y
 [skip] 10.3.5.48 | UNREACHABLE!
 ```
 
-That means WinRM is open but `labadmin/2026` doesn't authenticate. Causes:
+That means WinRM is open but `INU/2026` doesn't authenticate. Causes:
 - Enroll-LabDevice.bat wasn't actually run on that device → run it
 - Enroll-LabDevice.bat was run but the user named themselves something else manually
 - Non-lab device (staff machine that just happens to have WinRM enabled) → skip it

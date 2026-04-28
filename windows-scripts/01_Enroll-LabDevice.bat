@@ -15,9 +15,13 @@ echo   Lab Device - ENROLLMENT
 echo =============================================
 echo.
 echo   This will:
-echo     - Create/update local admin "labadmin" (password: 2026)
+echo     - Create/update local admin "INU" (password: 2026)
+echo     - DELETE every other local user account
 echo     - Enable WinRM (Automatic startup, firewall open)
 echo     - Set TrustedHosts to allow remote connections
+echo.
+echo   WARNING: All non-built-in local accounts on this device will
+echo   be removed. Make sure user data is backed up first.
 echo.
 
 powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%~dp001_Enroll-LabDevice.ps1"
