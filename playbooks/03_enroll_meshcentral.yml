@@ -13,7 +13,7 @@
 
     - name: Copy MeshService64.exe to target
       win_copy:
-        src: /home/abood/lab/files/MeshService64.exe
+        src: "{{ playbook_dir }}/../files/MeshService64.exe"
         dest: C:\Windows\Temp\MeshService64.exe
 
     - name: Install Mesh Agent service

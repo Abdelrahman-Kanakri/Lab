@@ -20,9 +20,9 @@
   hosts: lab
   gather_facts: false
   vars:
-    unlock_script_src: /home/abood/lab/windows-scripts/05_Unlock-StudentDevice.ps1
-    lock_script_src:   /home/abood/lab/windows-scripts/02_Lock-StudentDevice.ps1
-    mesh_exe_src:      /home/abood/lab/files/MeshService64.exe
+    unlock_script_src: "{{ playbook_dir }}/../windows-scripts/05_Unlock-StudentDevice.ps1"
+    lock_script_src:   "{{ playbook_dir }}/../windows-scripts/02_Lock-StudentDevice.ps1"
+    mesh_exe_src:      "{{ playbook_dir }}/../files/MeshService64.exe"
     remote_stage:      C:\Windows\LabDeploy
 
   tasks:

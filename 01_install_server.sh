@@ -7,10 +7,10 @@ set -euo pipefail
 
 source "$(dirname "$0")/config.env"
 
-echo "[1/7] Installing Node.js and npm..."
+echo "[1/8] Installing Node.js and npm..."
 sudo dnf install -y nodejs npm
 
-echo "[2/7] Installing MeshCentral into $MESH_DIR..."
+echo "[2/8] Installing MeshCentral into $MESH_DIR..."
 mkdir -p "$MESH_DIR"
 cd "$MESH_DIR"
 if [ ! -d "node_modules/meshcentral" ]; then
@@ -19,7 +19,7 @@ else
     echo "    already installed, skipping"
 fi
 
-echo "[3/7] Granting Node permission to bind ports 80/443..."
+echo "[3/8] Granting Node permission to bind ports 80/443..."
 NODE_PATH="$(readlink -f "$(command -v node)")"
 if [ -z "$NODE_PATH" ] || [ ! -f "$NODE_PATH" ]; then
     echo "ERROR: node binary not found"
@@ -28,7 +28,7 @@ fi
 echo "    node real path: $NODE_PATH"
 sudo setcap 'cap_net_bind_service=+ep' "$NODE_PATH"
 
-echo "[4/7] Generating certificates (first run)..."
+echo "[4/8] Generating certificates (first run)..."
 if [ ! -d "$MESH_DIR/meshcentral-data" ]; then
     # MeshCentral runs in the foreground after generating certs, so we launch
     # it in the background, poll for the last artifact (the signed agent), then
@@ -65,7 +65,7 @@ else
     echo "    certs already exist, skipping"
 fi
 
-echo "[5/7] Writing systemd unit..."
+echo "[5/8] Writing systemd unit..."
 sudo tee /etc/systemd/system/meshcentral.service > /dev/null <<EOF
 [Unit]
 Description=MeshCentral Server
