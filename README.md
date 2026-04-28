@@ -137,3 +137,4 @@ Files are numbered by **order of use** — `01_*` first, `02_*` next, etc.
 - **`01_` to `07_`** in `windows-scripts/` = `01` mandatory; `02–04` typical setup; `05–07` maintenance/alternatives
 - **`legacy/`** = superseded files kept for reference, not used in current flow
 - **No prefix** = config files (`config.env`, `hosts.ini`) or files referenced by other scripts
+# Lab
