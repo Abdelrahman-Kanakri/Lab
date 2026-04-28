@@ -30,8 +30,37 @@ sudo setcap 'cap_net_bind_service=+ep' "$NODE_PATH"
 
 echo "[4/7] Generating certificates (first run)..."
 if [ ! -d "$MESH_DIR/meshcentral-data" ]; then
-    timeout 120 node node_modules/meshcentral || true
-    echo "    cert generation complete"
+    # MeshCentral runs in the foreground after generating certs, so we launch
+    # it in the background, poll for the last artifact (the signed agent), then
+    # stop it. Without this, the script would either hang or timeout for 120s.
+    LOG="/tmp/meshcentral_init.log"
+    node node_modules/meshcentral >"$LOG" 2>&1 &
+    MESH_PID=$!
+
+    AGENT_FILE="$MESH_DIR/meshcentral-data/signedagents/MeshService64.exe"
+    elapsed=0
+    printf "    waiting for cert + agent generation"
+    while [ $elapsed -lt 60 ]; do
+        [ -f "$AGENT_FILE" ] && break
+        sleep 1
+        elapsed=$((elapsed + 1))
+        printf '.'
+    done
+    echo ""
+
+    # Give straggler signed agents (~5 more files) a moment to finish, then
+    # kill BOTH the parent and the --launch'd child. pkill -f matches both.
+    sleep 2
+    pkill -f "$MESH_DIR/node_modules/meshcentral/meshcentral.js" 2>/dev/null || true
+    wait "$MESH_PID" 2>/dev/null || true
+
+    if [ -f "$AGENT_FILE" ]; then
+        echo "    cert generation complete (${elapsed}s)"
+    else
+        echo "    ERROR: signed agent did not appear within 60s"
+        echo "    See $LOG for details"
+        exit 1
+    fi
 else
     echo "    certs already exist, skipping"
 fi
