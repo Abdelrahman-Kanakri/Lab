@@ -116,15 +116,15 @@ The teammate then opens `https://<CONTROLLER_IP>` and logs in with their credent
 
 ```bash
 # Health check — should see all devices reachable
-~/lab/check_lab.sh
+~/lab/03_check_lab.sh
 
 # One-shot ping
 ansible lab -i ~/lab/hosts.ini -m win_ping --forks 50
 ```
 
 If anything fails:
-- Auth errors → confirm `hosts.ini` has the right credentials and is up to date
-- Network errors → confirm the teammate's box is on the lab subnet (`10.3.5.0/24`)
+- Auth errors → confirm `hosts.ini` has the right credentials and is up to date. The current local admin on every device is `INU` / `2026` (was `labadmin` historically — old copies of `hosts.ini` will have stale credentials and every device will return "credentials rejected").
+- Network errors → confirm the teammate's box is on the lab subnet shown in `config.env`'s `LAB_RANGE_START` (currently `10.3.8.0/24`)
 - "command not found" → re-run Step 1 install commands
 
 ---
@@ -133,11 +133,11 @@ If anything fails:
 
 ### From terminal (Ansible)
 ```bash
-~/lab/check_lab.sh                                                   # health snapshot
-~/lab/add_devices.sh                                                 # enroll new devices
+~/lab/03_check_lab.sh                                                # health snapshot
+~/lab/02_add_devices.sh                                              # enroll new devices
 ansible lab -i ~/lab/hosts.ini -m win_ping                           # ping all
 ansible lab -i ~/lab/hosts.ini -m win_command -a "shutdown /s /t 0"  # shutdown all
-ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/verify_agents.yml
+ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/02_verify_agents.yml
 ```
 
 ### From browser (MeshCentral)

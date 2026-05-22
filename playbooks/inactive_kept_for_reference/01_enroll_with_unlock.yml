@@ -85,6 +85,50 @@
         path: "{{ remote_stage }}"
         state: absent
 
+    # ---- HARDEN ----
+    # Same logic as windows-scripts/01_Enroll-LabDevice.ps1 steps 6+7. We bake
+    # it into the controller-side enrollment so devices added via 02_add_devices.sh
+    # come out identically configured regardless of whether they were USB-walked
+    # with the latest enrollment script or an older one.
+
+    - name: Disable sleep / hibernate timeouts (AC + DC)
+      win_shell: |
+        powercfg /change standby-timeout-ac 0
+        powercfg /change monitor-timeout-ac 0
+        powercfg /change disk-timeout-ac 0
+        powercfg /change hibernate-timeout-ac 0
+        powercfg /change standby-timeout-dc 0
+        powercfg /change hibernate-timeout-dc 0
+      changed_when: true
+
+    - name: Disable hibernation + Fast Startup (so WoL works after shutdown)
+      win_command: powercfg -h off
+      failed_when: false
+      changed_when: true
+
+    - name: Enable Wake-on-LAN on every UP physical NIC (best effort)
+      # NIC reconfig can break WinRM mid-call; failed_when: false absorbs that.
+      # The change persists locally regardless. Re-run is safe.
+      win_shell: |
+        $ok = @()
+        $nics = Get-NetAdapter -Physical | Where-Object Status -eq 'Up'
+        foreach ($n in $nics) {
+            try { Set-NetAdapterPowerManagement -Name $n.Name -WakeOnMagicPacket Enabled -ErrorAction Stop; $ok += "$($n.Name):magic" } catch { }
+            try {
+                $pm = Get-NetAdapterPowerManagement -Name $n.Name
+                $pm.AllowComputerToTurnOffDevice = 'Disabled'
+                $pm | Set-NetAdapterPowerManagement -ErrorAction Stop
+                $ok += "$($n.Name):no-off"
+            } catch { }
+            foreach ($p in @('Wake on Magic Packet','Wake on pattern match','Wake from S5')) {
+                try { Set-NetAdapterAdvancedProperty -Name $n.Name -DisplayName $p -DisplayValue 'Enabled' -ErrorAction Stop; $ok += "$($n.Name):drv-$p" } catch { }
+            }
+        }
+        if ($ok) { ($ok -join ', ') } else { "no software WoL path accepted (BIOS may need enable)" }
+      register: wol_out
+      failed_when: false
+      changed_when: true
+
     - name: Report per-host result
       debug:
-        msg: "{{ inventory_hostname }}: MeshAgent {{ final_status.stdout | trim }}"
+        msg: "{{ inventory_hostname }}: MeshAgent {{ final_status.stdout | trim }}; WoL: {{ wol_out.stdout | default('?') | trim }}"

@@ -2,16 +2,25 @@
 # Enroll-LabDevice.ps1
 # Run via Enroll-LabDevice.bat (self-elevates).
 #
-# What it does (in order):
-#   1. Creates / updates a single local admin: INU / 2026
-#   2. Deletes EVERY other non-built-in local user account
-#      (Administrator, Guest, DefaultAccount, WDAGUtilityAccount stay)
-#   3. Enables WinRM (Automatic startup)
-#   4. Opens firewall TCP 5985
+# Designed for the two-account model:
+#   - Lab-Admin (Administrators group, password "2026@admin") — YOU.
+#     CREATED MANUALLY before this script runs (you must be logged in as
+#     some admin to run an elevated script in the first place).
+#     Ansible on the controller connects to the device as this user.
+#   - INU       (Guests group,         password "2026")        — students.
+#     Created BY THIS SCRIPT if missing (idempotent — won't touch an
+#     existing INU's password, just ensures Guests-group membership).
 #
-# After this script, the only usable local account on the device is INU.
-# Profile folders under C:\Users\<name>\ are NOT removed; clean those by
-# hand if you want the disk space back.
+# Step list:
+#   1. Verify Lab-Admin exists + is in Administrators           (HARD FAIL if not)
+#   2. Create INU if missing, ensure it's in Guests (not Users)
+#   3. Delete every other non-built-in local account            (keeps you + INU)
+#   4. Enable WinRM (Automatic startup, listening on TCP 5985)
+#   5. Open firewall TCP 5985 inbound
+#   6. Disable sleep / display-off / disk / hibernate / Fast Startup
+#   7. Enable Wake-on-LAN on every UP physical NIC (best effort)
+#
+# Idempotent. Safe to re-run.
 # ============================================================
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")) {
@@ -21,6 +30,7 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 function Write-Step($n, $t, $m) { Write-Host "`n[$n/$t] $m" -ForegroundColor Yellow }
 function Write-OK($m)            { Write-Host "  [OK] $m"      -ForegroundColor Green }
 function Write-Item($m)          { Write-Host "       $m"      -ForegroundColor DarkGray }
+function Write-Warn($m)          { Write-Host "  [WARN] $m"    -ForegroundColor DarkYellow }
 function Write-Fail($m)          { Write-Host "  [!!] $m"      -ForegroundColor Red }
 
 Write-Host ""
@@ -28,57 +38,91 @@ Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host "    Lab Device - ENROLL                      " -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
 
-$TotalSteps = 6
+$AdminUser = "Lab-Admin"
+$GuestUser = "INU"
+$TotalSteps = 7
 
 # ============================================================
-# STEP 1: Create or update INU
+# STEP 1: Verify Lab-Admin exists and is in Administrators
 # ============================================================
-Write-Step 1 $TotalSteps "Creating/updating INU user..."
+Write-Step 1 $TotalSteps "Verifying $AdminUser exists in Administrators..."
 
-$user = "INU"
-$pass = ConvertTo-SecureString "2026" -AsPlainText -Force
-
-try {
-    if (Get-LocalUser -Name $user -ErrorAction SilentlyContinue) {
-        Set-LocalUser -Name $user -Password $pass -PasswordNeverExpires $true
-        Enable-LocalUser -Name $user
-        Write-OK "Updated existing user: $user"
-    } else {
-        New-LocalUser -Name $user -Password $pass `
-            -PasswordNeverExpires -AccountNeverExpires `
-            -FullName "INU Lab Admin" -Description "Created by Enroll-LabDevice.ps1" | Out-Null
-        Write-OK "Created user: $user"
-    }
-} catch {
-    Write-Fail "User create/update failed: $_"
+$la = Get-LocalUser -Name $AdminUser -ErrorAction SilentlyContinue
+if (-not $la) {
+    Write-Fail "$AdminUser does not exist. Create it manually first:"
+    Write-Item  "  net user $AdminUser 2026@admin /add"
+    Write-Item  "  net localgroup Administrators $AdminUser /add"
     exit 1
 }
+$inAdmins = (Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue | Where-Object Name -match "\\$AdminUser$")
+if (-not $inAdmins) {
+    Write-Fail "$AdminUser exists but is NOT in Administrators. Add it first:"
+    Write-Item  "  net localgroup Administrators $AdminUser /add"
+    exit 1
+}
+Write-OK "$AdminUser present and in Administrators."
 
 # ============================================================
-# STEP 2: Add INU to Administrators
+# STEP 2: INU — create if missing, ensure Guests-only group membership
+# Idempotent. If INU already exists, the password is left alone (in case
+# you intentionally changed it). Only the group membership is enforced.
 # ============================================================
-Write-Step 2 $TotalSteps "Adding $user to Administrators group..."
+Write-Step 2 $TotalSteps "Setting up $GuestUser as a Guest..."
 
-try {
-    Add-LocalGroupMember -Group "Administrators" -Member $user -ErrorAction Stop
-    Write-OK "Added to Administrators."
-} catch {
-    if ($_.Exception.Message -match "already") {
-        Write-OK "Already in Administrators."
-    } else {
-        Write-Fail "Add to Administrators failed: $_"
+$inu = Get-LocalUser -Name $GuestUser -ErrorAction SilentlyContinue
+if (-not $inu) {
+    try {
+        $pass = ConvertTo-SecureString "2026" -AsPlainText -Force
+        New-LocalUser -Name $GuestUser -Password $pass `
+            -PasswordNeverExpires -AccountNeverExpires `
+            -FullName "INU Guest" -Description "Lab guest account (created by enrollment script)" | Out-Null
+        Write-OK "Created $GuestUser (password: 2026)"
+    } catch {
+        Write-Fail "Failed to create $GuestUser : $_"
+        exit 1
     }
+} else {
+    Write-OK "$GuestUser already exists (password left unchanged)"
+}
+
+# Ensure in Guests
+$inGuests = (Get-LocalGroupMember -Group "Guests" -ErrorAction SilentlyContinue | Where-Object Name -match "\\$GuestUser$")
+if (-not $inGuests) {
+    try {
+        Add-LocalGroupMember -Group "Guests" -Member $GuestUser -ErrorAction Stop
+        Write-OK "Added $GuestUser to Guests"
+    } catch { Write-Fail "Add to Guests failed: $_" }
+} else {
+    Write-OK "$GuestUser already in Guests"
+}
+
+# Remove from Users (default group on creation) so true guest restrictions apply
+$inUsers = (Get-LocalGroupMember -Group "Users" -ErrorAction SilentlyContinue | Where-Object Name -match "\\$GuestUser$")
+if ($inUsers) {
+    try {
+        Remove-LocalGroupMember -Group "Users" -Member $GuestUser -ErrorAction Stop
+        Write-OK "Removed $GuestUser from Users (Guests-only now)"
+    } catch { Write-Fail "Remove from Users failed: $_" }
+}
+
+# Make sure INU is in NO Administrators group, ever
+$inAdmins = (Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue | Where-Object Name -match "\\$GuestUser$")
+if ($inAdmins) {
+    try {
+        Remove-LocalGroupMember -Group "Administrators" -Member $GuestUser -ErrorAction Stop
+        Write-OK "Removed $GuestUser from Administrators (was wrongly elevated)"
+    } catch { Write-Fail "Remove from Administrators failed: $_" }
 }
 
 # ============================================================
 # STEP 3: Delete every other local user
-# Built-in accounts and the currently-running user are skipped.
+# Keep: built-ins, Lab-Admin, INU, currently-running user.
 # ============================================================
 Write-Step 3 $TotalSteps "Removing all other local users..."
 
 $builtIn = @('Administrator', 'Guest', 'DefaultAccount', 'WDAGUtilityAccount')
 $running = $env:USERNAME
-$keep    = @($user) + $builtIn + @($running) | Sort-Object -Unique
+$keep    = @($AdminUser, $GuestUser) + $builtIn + @($running) | Sort-Object -Unique
 
 $victims = Get-LocalUser | Where-Object { $keep -notcontains $_.Name }
 
@@ -95,13 +139,12 @@ if (-not $victims) {
     }
 }
 
-if ($running -ne $user -and $builtIn -notcontains $running) {
-    Write-Item "Skipped '$running' because the script is currently running as that user."
-    Write-Item "Log out, sign in as $user, and re-run to remove '$running' as well."
+if ($running -ne $AdminUser -and $running -ne $GuestUser -and $builtIn -notcontains $running) {
+    Write-Item "Skipped '$running' (you're signed in as that account). Sign out and re-run as $AdminUser to remove it."
 }
 
 # ============================================================
-# STEP 4: Enable WinRM
+# STEP 4: Enable WinRM (so the controller's ansible can reach us)
 # ============================================================
 Write-Step 4 $TotalSteps "Enabling WinRM..."
 
@@ -134,18 +177,73 @@ try {
 }
 
 # ============================================================
-# STEP 6: Final state report
+# STEP 6: Harden — no sleep, no hibernate, no Fast Startup
+# Why: a sleeping device can't be reached and a hibernated/Fast-Startup-
+# shutdown device can't WoL because the NIC stays half-asleep.
 # ============================================================
-Write-Step 6 $TotalSteps "Final state..."
+Write-Step 6 $TotalSteps "Disabling sleep / hibernate / Fast Startup..."
 
+try {
+    powercfg /change standby-timeout-ac 0    | Out-Null
+    powercfg /change monitor-timeout-ac 0    | Out-Null
+    powercfg /change disk-timeout-ac 0       | Out-Null
+    powercfg /change hibernate-timeout-ac 0  | Out-Null
+    powercfg /change standby-timeout-dc 0    | Out-Null
+    powercfg /change hibernate-timeout-dc 0  | Out-Null
+    Write-OK "Power timeouts set to Never."
+} catch { Write-Fail "powercfg timeouts failed: $_" }
+
+try {
+    powercfg -h off 2>&1 | Out-Null
+    Write-OK "Hibernation + Fast Startup disabled."
+} catch { Write-Fail "powercfg -h off failed: $_" }
+
+# ============================================================
+# STEP 7: Wake-on-LAN — best effort across NIC + driver
+# ============================================================
+Write-Step 7 $TotalSteps "Enabling Wake-on-LAN on physical NICs..."
+
+$nics = Get-NetAdapter -Physical | Where-Object Status -eq 'Up'
+if (-not $nics) {
+    Write-Item "No UP physical NICs found."
+} else {
+    foreach ($n in $nics) {
+        $okBits = @()
+        try {
+            Set-NetAdapterPowerManagement -Name $n.Name -WakeOnMagicPacket Enabled -ErrorAction Stop
+            $okBits += "magic-packet"
+        } catch { }
+        try {
+            $pm = Get-NetAdapterPowerManagement -Name $n.Name
+            $pm.AllowComputerToTurnOffDevice = 'Disabled'
+            $pm | Set-NetAdapterPowerManagement -ErrorAction Stop
+            $okBits += "no-power-off"
+        } catch { }
+        foreach ($pname in @('Wake on Magic Packet','Wake on pattern match','Wake from S5')) {
+            try {
+                Set-NetAdapterAdvancedProperty -Name $n.Name -DisplayName $pname -DisplayValue 'Enabled' -ErrorAction Stop
+                $okBits += "drv:$pname"
+            } catch { }
+        }
+        if ($okBits) {
+            Write-OK ("$($n.Name) ($($n.MacAddress)): " + ($okBits -join ', '))
+        } else {
+            Write-Item "$($n.Name) ($($n.MacAddress)): no software path accepted (likely needs BIOS WoL enable)"
+        }
+    }
+}
+
+# ============================================================
+# Final state report
+# ============================================================
 Write-Host ""
 Write-Host "  --- WinRM service ---" -ForegroundColor Cyan
 Get-Service WinRM | Format-Table Name, Status, StartType -AutoSize
 
-Write-Host "  --- Local users ---" -ForegroundColor Cyan
+Write-Host "  --- Local users (only Lab-Admin + INU + built-ins should remain) ---" -ForegroundColor Cyan
 Get-LocalUser | Format-Table Name, Enabled -AutoSize
 
-Write-Host "  --- Administrators ---" -ForegroundColor Cyan
+Write-Host "  --- Administrators (should contain only Lab-Admin + Administrator built-in) ---" -ForegroundColor Cyan
 Get-LocalGroupMember -Group "Administrators" | Format-Table Name -AutoSize
 
 Write-Host "  --- This device ---" -ForegroundColor Cyan

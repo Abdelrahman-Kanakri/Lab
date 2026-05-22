@@ -1,0 +1,43 @@
+---
+# Create / refresh the INU local admin on lab devices.
+# Run as the CURRENT admin (labadmin) — does not delete anything.
+#
+# Usage (driven by 03_switch_to_inu.sh):
+#   ansible-playbook -i <inv-as-labadmin> ~/lab/playbooks/09_create_inu.yml --forks 30
+#
+# Idempotent: re-running just resets INU's password and re-asserts admin rights.
+
+- name: Create INU local admin
+  hosts: lab
+  gather_facts: false
+  vars:
+    inu_user: INU
+    inu_pass: "2026"
+
+  tasks:
+
+    - name: Ensure INU exists with password 2026 (create or update)
+      win_user:
+        name: "{{ inu_user }}"
+        password: "{{ inu_pass }}"
+        state: present
+        password_never_expires: true
+        account_disabled: false
+        account_locked: false
+        update_password: always
+
+    - name: Ensure INU is in Administrators
+      win_group_membership:
+        name: Administrators
+        members:
+          - "{{ inu_user }}"
+        state: present
+
+    - name: Verify INU shows up
+      win_shell: 'net user {{ inu_user }} | findstr /i "Local Group Memberships"'
+      register: net_user_out
+      changed_when: false
+
+    - name: Report
+      debug:
+        msg: "{{ inventory_hostname }}: INU ready"

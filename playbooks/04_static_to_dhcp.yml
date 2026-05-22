@@ -1,0 +1,40 @@
+---
+# 04_static_to_dhcp.yml — flip every lab device from static IP back to DHCP.
+#
+# WARNING: this WILL break Ansible connectivity to every device. Devices keep
+# the Mesh Agent running (it reconnects outbound on 443), but hosts.ini
+# becomes stale the instant DHCP hands out new addresses.
+#
+# After this runs:
+#   1. Wait ~1 min for devices to pick up DHCP leases.
+#   2. Find them again via MeshCentral UI (the agents will phone home with
+#      their new IPs).
+#   3. Re-run `bash ~/lab/02_add_devices.sh` to rebuild hosts.ini for the
+#      new subnet (update LAB_RANGE_START in config.env first if the DHCP
+#      range is different from 10.3.8.0/24).
+#
+# Usage:
+#   ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/04_static_to_dhcp.yml --forks 30
+
+- name: Switch lab devices from static IP back to DHCP
+  hosts: lab
+  gather_facts: false
+
+  tasks:
+    - name: Set every UP physical NIC to DHCP and renew lease
+      # failed_when:false because the IP change drops the WinRM session
+      # before the task can return cleanly; the change persists locally.
+      win_shell: |
+        $nics = Get-NetAdapter -Physical | Where-Object Status -eq 'Up'
+        foreach ($n in $nics) {
+            try { Remove-NetRoute     -InterfaceAlias $n.Name -Confirm:$false -ErrorAction SilentlyContinue } catch {}
+            try { Remove-NetIPAddress -InterfaceAlias $n.Name -Confirm:$false -ErrorAction SilentlyContinue } catch {}
+            try { Set-NetIPInterface  -InterfaceAlias $n.Name -Dhcp Enabled                                  } catch {}
+            try { Set-DnsClientServerAddress -InterfaceAlias $n.Name -ResetServerAddresses                   } catch {}
+        }
+        # Kick DHCP without waiting on the call to return
+        Start-Process -FilePath ipconfig -ArgumentList '/release' -NoNewWindow -Wait
+        Start-Process -FilePath ipconfig -ArgumentList '/renew'   -NoNewWindow
+        "done"
+      failed_when: false
+      changed_when: true

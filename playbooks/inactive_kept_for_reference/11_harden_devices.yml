@@ -1,0 +1,63 @@
+---
+# Harden lab devices for unattended remote use:
+#   1. Remove our scheduled sleep/shutdown tasks (anything under \LabSchedule\)
+#   2. Disable sleep / display-off / disk-off / hibernate timeouts (AC + DC)
+#   3. Disable hibernation (also kills Fast Startup, required for WoL after shutdown)
+#   4. Enable Wake-on-LAN on every UP physical NIC + stop Windows powering it down
+#
+# Why a scheduled task instead of running directly via win_shell:
+#   The NIC reconfiguration step momentarily breaks WinRM, so a synchronous
+#   win_shell run reliably times out even with long read_timeout. We instead
+#   register a one-shot SYSTEM task on each device and disconnect immediately.
+#   The harden script then runs locally to completion, writes a state file,
+#   and self-deletes the task. We verify via a follow-up playbook (or ad-hoc
+#   `ansible lab -m win_shell -a 'cat C:\\ProgramData\\HardenState.json'`).
+#
+# Idempotent. Safe to re-run. Usage:
+#   ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/11_harden_devices.yml --forks 30
+
+- name: Harden lab devices (no sleep, no shutdown, WoL on)
+  hosts: lab
+  gather_facts: false
+  vars:
+    script_src:    "{{ playbook_dir }}/../files/Harden-LabDevice.ps1"
+    remote_stage:  C:\Windows\LabDeploy
+
+  tasks:
+
+    - name: Stage folder
+      win_file:
+        path: "{{ remote_stage }}"
+        state: directory
+
+    - name: Copy harden script
+      win_copy:
+        src: "{{ script_src }}"
+        dest: "{{ remote_stage }}\\Harden-LabDevice.ps1"
+
+    - name: Register one-shot SYSTEM task to run harden script in 5s
+      win_shell: |
+        $action  = New-ScheduledTaskAction  -Execute "powershell.exe" -Argument '-ExecutionPolicy Bypass -NoProfile -File "C:\Windows\LabDeploy\Harden-LabDevice.ps1"'
+        $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(5))
+        $set     = New-ScheduledTaskSettingsSet -DeleteExpiredTaskAfter ([System.TimeSpan]::FromMinutes(2)) -StartWhenAvailable
+        Register-ScheduledTask -TaskName "HardenOnce" -Action $action -Trigger $trigger -Settings $set -User "SYSTEM" -RunLevel Highest -Force | Out-Null
+        "scheduled"
+
+    - name: Wait briefly so the controller doesn't immediately re-poke devices
+      pause:
+        seconds: 90
+      run_once: true
+
+    - name: Read post-run state file from each device
+      win_shell: |
+        if (Test-Path C:\ProgramData\HardenState.json) {
+            Get-Content C:\ProgramData\HardenState.json -Raw
+        } else {
+            "missing"
+        }
+      register: state_out
+      failed_when: false
+
+    - name: Per-host state
+      debug:
+        msg: "{{ inventory_hostname }} -> {{ state_out.stdout | default('?') | trim }}"

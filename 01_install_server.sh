@@ -49,9 +49,11 @@ if [ ! -d "$MESH_DIR/meshcentral-data" ]; then
     echo ""
 
     # Give straggler signed agents (~5 more files) a moment to finish, then
-    # kill BOTH the parent and the --launch'd child. pkill -f matches both.
+    # kill BOTH the parent ("node node_modules/meshcentral") and the --launch'd
+    # child ("...node_modules/meshcentral --launch <pid>"). They don't share a
+    # filename in argv, but they all have "node_modules/meshcentral" in common.
     sleep 2
-    pkill -f "$MESH_DIR/node_modules/meshcentral/meshcentral.js" 2>/dev/null || true
+    pkill -f "node_modules/meshcentral" 2>/dev/null || true
     wait "$MESH_PID" 2>/dev/null || true
 
     if [ -f "$AGENT_FILE" ]; then

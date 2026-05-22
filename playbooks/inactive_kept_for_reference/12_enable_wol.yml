@@ -1,0 +1,34 @@
+---
+# Enable Wake-on-LAN on every UP physical NIC across the lab.
+# Uses fire-and-forget scheduled task on each device to avoid WinRM mid-call
+# breakage caused by NIC reconfiguration.
+#
+# Usage:
+#   ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/12_enable_wol.yml --forks 30
+
+- name: Enable WoL across the lab (fire-and-forget)
+  hosts: lab
+  gather_facts: false
+  vars:
+    script_src:    "{{ playbook_dir }}/../files/Enable-WoL.ps1"
+    remote_stage:  C:\Windows\LabDeploy
+
+  tasks:
+
+    - name: Stage folder
+      win_file:
+        path: "{{ remote_stage }}"
+        state: directory
+
+    - name: Copy WoL script
+      win_copy:
+        src: "{{ script_src }}"
+        dest: "{{ remote_stage }}\\Enable-WoL.ps1"
+
+    - name: Register one-shot SYSTEM task to run WoL script in 5s
+      win_shell: |
+        $action  = New-ScheduledTaskAction  -Execute "powershell.exe" -Argument '-ExecutionPolicy Bypass -NoProfile -File "C:\Windows\LabDeploy\Enable-WoL.ps1"'
+        $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(5))
+        $set     = New-ScheduledTaskSettingsSet -DeleteExpiredTaskAfter ([System.TimeSpan]::FromMinutes(5)) -StartWhenAvailable
+        Register-ScheduledTask -TaskName "WolOnce" -Action $action -Trigger $trigger -Settings $set -User "SYSTEM" -RunLevel Highest -Force | Out-Null
+        "scheduled"

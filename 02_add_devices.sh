@@ -79,7 +79,9 @@ fi
 echo ""
 echo "[2/6] Finding new devices (not yet in ~/lab/hosts.ini)..."
 ALREADY="/tmp/lab_already.txt"
-grep -oE "^$SUBNET\.[0-9]+" ~/lab/hosts.ini 2>/dev/null | sort -u > "$ALREADY"
+# On a fresh install hosts.ini doesn't exist yet, and grep exits 1 on
+# "no matches" / 2 on "file not found". Either trips set -o pipefail.
+{ grep -oE "^$SUBNET\.[0-9]+" ~/lab/hosts.ini 2>/dev/null || true; } | sort -u > "$ALREADY"
 comm -23 <(sort "$TMP_FOUND") "$ALREADY" > "$TMP_NEW"
 NEW_COUNT=$(wc -l < "$TMP_NEW")
 echo "    $NEW_COUNT new devices:"
@@ -98,7 +100,10 @@ echo "      (Running Ansible in real-time so you can see exactly what is happeni
 
 write_inventory "$TMP_NEW" "$TMP_INI"
 
-ansible lab -i "$TMP_INI" -m win_ping --forks 20 | tee /tmp/lab_auth_log_raw.txt
+# ansible exits non-zero on partial failure (any UNREACHABLE/FAILED host).
+# Detecting which hosts are reachable IS the point of this step, so don't
+# let pipefail abort the script — we parse the log below.
+ansible lab -i "$TMP_INI" -m win_ping --forks 20 | tee /tmp/lab_auth_log_raw.txt || true
 
 # Extract SUCCESS hosts from the live log
 grep "SUCCESS" /tmp/lab_auth_log_raw.txt | awk '{print $1}' | sort -u > "$TMP_READY"
@@ -124,7 +129,7 @@ echo ""
 echo "[4/6] Ready to enroll these in MeshCentral:"
 sort -t. -k4 -n "$TMP_READY" | sed 's/^/      /'
 echo ""
-read -r -p "Proceed with enrollment? [y/N] " ans
+read -r -p "Proceed with enrollment? [y/N] " ans </dev/tty
 if [[ ! "$ans" =~ ^[Yy]$ ]]; then
     echo "Cancelled."
     exit 0
@@ -136,8 +141,11 @@ echo "[5/6] Running enrollment playbook..."
 
 write_inventory "$TMP_READY" "$TMP_INI"
 
-ansible-playbook -i "$TMP_INI" ~/lab/playbooks/01_enroll_with_unlock.yml \
-    --forks "$READY_COUNT" | tee /tmp/lab_enroll_log.txt
+# Same as phase 3: ansible-playbook exits non-zero on partial failure, but
+# step 6 below explicitly splits PLAY RECAP into success/failure buckets.
+# Don't let pipefail kill the script before that runs.
+ansible-playbook -i "$TMP_INI" ~/lab/playbooks/01_enroll.yml \
+    --forks "$READY_COUNT" | tee /tmp/lab_enroll_log.txt || true
 
 # ---- Step 6: verify via PLAY RECAP and merge into hosts.ini ----
 echo ""
@@ -174,10 +182,12 @@ fi
 
 echo "  Successfully enrolled $ENROLLED_COUNT device(s)."
 
-# Merge verified successes into hosts.ini
+# Merge verified successes into hosts.ini.
+# Same hosts.ini-may-not-exist case as step 2 — wrap grep so it can't trip
+# pipefail before the merge runs.
 ALL_HOSTS="/tmp/lab_all_hosts.txt"
 {
-    grep -oE "^$SUBNET\.[0-9]+" ~/lab/hosts.ini 2>/dev/null
+    grep -oE "^$SUBNET\.[0-9]+" ~/lab/hosts.ini 2>/dev/null || true
     cat /tmp/lab_enroll_success.txt
 } | sort -u -t. -k4 -n > "$ALL_HOSTS"
 

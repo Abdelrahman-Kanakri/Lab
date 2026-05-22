@@ -1,0 +1,112 @@
+---
+# 01_enroll.yml — direct MeshCentral enrollment + harden in one playbook.
+#
+# This is the SINGLE enrollment path. It runs against any host in the [lab]
+# group of hosts.ini and:
+#   1. Installs the server-signed Mesh Agent (registers as a Windows service)
+#   2. Disables sleep / display-off / disk / hibernate timeouts
+#   3. Disables hibernation + Fast Startup (so WoL works after shutdown)
+#   4. Enables Wake-on-LAN on every UP physical NIC (best effort — many NICs
+#      need a one-time BIOS visit too, which we can't fix remotely)
+#
+# Idempotent. Safe to re-run on already-enrolled devices.
+#
+# Notes:
+#   - There is no "unlock / lock" wrap (we no longer use the Lab-Lock policy).
+#   - Restrictions are now applied via Windows guest-account permissions,
+#     which the Mesh Agent service is unaffected by.
+#
+# Usage:
+#   ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/01_enroll.yml --forks 30
+#
+# Prereqs:
+#   - ~/lab/files/MeshService64.exe exists (staged by 01_install_server.sh)
+#   - ansible lab -m win_ping passes on target hosts (INU credential works)
+
+- name: Enroll + harden lab devices
+  hosts: lab
+  gather_facts: false
+  vars:
+    mesh_exe_src:  "{{ playbook_dir }}/../files/MeshService64.exe"
+    remote_stage:  C:\Windows\LabDeploy
+
+  tasks:
+
+    # -------- 1. Mesh Agent install --------
+
+    - name: Stage folder
+      win_file:
+        path: "{{ remote_stage }}"
+        state: directory
+
+    - name: Copy Mesh Agent installer
+      win_copy:
+        src: "{{ mesh_exe_src }}"
+        dest: "{{ remote_stage }}\\meshagent.exe"
+
+    - name: Run -fullinstall (registers Mesh Agent as a Windows service)
+      win_command: "{{ remote_stage }}\\meshagent.exe -fullinstall"
+      register: install_result
+      failed_when: install_result.rc not in [0, 1]
+
+    - name: Wait for Mesh Agent service to come up
+      win_service:
+        name: "Mesh Agent"
+        state: started
+      register: svc_status
+      retries: 6
+      delay: 5
+      until: svc_status is succeeded
+
+    - name: Cleanup staging folder
+      win_file:
+        path: "{{ remote_stage }}"
+        state: absent
+
+    # -------- 2. Power: never sleep, never hibernate --------
+
+    - name: Disable sleep / display / disk / hibernate timeouts (AC + DC)
+      win_shell: |
+        powercfg /change standby-timeout-ac 0
+        powercfg /change monitor-timeout-ac 0
+        powercfg /change disk-timeout-ac 0
+        powercfg /change hibernate-timeout-ac 0
+        powercfg /change standby-timeout-dc 0
+        powercfg /change hibernate-timeout-dc 0
+      changed_when: true
+
+    - name: Disable hibernation + Fast Startup (so WoL works after shutdown)
+      win_command: powercfg -h off
+      failed_when: false
+      changed_when: true
+
+    # -------- 3. Wake-on-LAN --------
+
+    - name: Enable WoL on every UP physical NIC (best effort)
+      # NIC reconfig sometimes drops WinRM mid-call; failed_when:false absorbs
+      # that. The change persists locally regardless. Re-run is safe.
+      win_shell: |
+        $ok = @()
+        $nics = Get-NetAdapter -Physical | Where-Object Status -eq 'Up'
+        foreach ($n in $nics) {
+            try { Set-NetAdapterPowerManagement -Name $n.Name -WakeOnMagicPacket Enabled -ErrorAction Stop; $ok += "$($n.Name):magic" } catch { }
+            try {
+                $pm = Get-NetAdapterPowerManagement -Name $n.Name
+                $pm.AllowComputerToTurnOffDevice = 'Disabled'
+                $pm | Set-NetAdapterPowerManagement -ErrorAction Stop
+                $ok += "$($n.Name):no-off"
+            } catch { }
+            foreach ($p in @('Wake on Magic Packet','Wake on pattern match','Wake from S5')) {
+                try { Set-NetAdapterAdvancedProperty -Name $n.Name -DisplayName $p -DisplayValue 'Enabled' -ErrorAction Stop; $ok += "$($n.Name):drv-$p" } catch { }
+            }
+        }
+        if ($ok) { ($ok -join ', ') } else { "no software WoL path accepted (BIOS may need enable)" }
+      register: wol_out
+      failed_when: false
+      changed_when: true
+
+    # -------- 4. Per-host summary --------
+
+    - name: Per-host summary
+      debug:
+        msg: "{{ inventory_hostname }}: agent={{ svc_status.state | default('?') }}; wol={{ wol_out.stdout | default('?') | trim }}"

@@ -1,0 +1,51 @@
+---
+# Delete the legacy "labadmin" user + profile on lab devices.
+# MUST be run while connected as a DIFFERENT admin (INU).
+#
+# Usage (driven by 03_switch_to_inu.sh):
+#   ansible-playbook -i <inv-as-INU> ~/lab/playbooks/10_delete_labadmin.yml --forks 30
+#
+# Idempotent: silently no-ops on devices where labadmin is already gone.
+
+- name: Delete labadmin local user
+  hosts: lab
+  gather_facts: false
+  vars:
+    target_user: labadmin
+
+  tasks:
+
+    - name: Sanity check — make sure we are NOT connected as labadmin
+      win_shell: '$env:USERNAME'
+      register: whoami_out
+      changed_when: false
+      failed_when: whoami_out.stdout | trim | lower == target_user | lower
+
+    - name: Check if labadmin exists
+      win_shell: 'if (Get-LocalUser -Name "{{ target_user }}" -ErrorAction SilentlyContinue) { "yes" } else { "no" }'
+      register: la_exists
+      changed_when: false
+
+    - name: Delete labadmin user
+      win_user:
+        name: "{{ target_user }}"
+        state: absent
+      when: la_exists.stdout | trim == 'yes'
+
+    - name: Remove labadmin profile folder (best effort)
+      win_shell: |
+        $p = "C:\Users\{{ target_user }}"
+        if (Test-Path $p) {
+            try { Remove-Item -Path $p -Recurse -Force -ErrorAction Stop; "removed" }
+            catch { "locked" }
+        } else { "absent" }
+      register: profile_out
+      changed_when: profile_out.stdout | trim == 'removed'
+      failed_when: false
+
+    - name: Report
+      debug:
+        msg: >-
+          {{ inventory_hostname }}:
+          user={{ 'deleted' if la_exists.stdout | trim == 'yes' else 'already-absent' }},
+          profile={{ profile_out.stdout | trim }}
