@@ -14,6 +14,8 @@ Files are numbered by **order of use** — `00_*` is teardown, `01_*` first inst
 ~/lab/
 ├── README.md                              ← reference (you are here)
 ├── FRESH_START.md                         ← end-of-semester rebuild recipe — START HERE
+├── NEXT_SEMESTER.md                       ← restore plan: flip the lab from DHCP back to static IPs next term
+├── device_names.md                        ← 46-row table: MeshCentral name ↔ static IP ↔ Windows hostname (source of truth for the restore)
 ├── .gitignore                             ← keeps runtime + secrets out of git
 ├── config.env.example                     ← TEMPLATE: cp to config.env, edit, source
 ├── config.env                             ← (gitignored) your real values — CONTROLLER_IP, password
@@ -42,6 +44,7 @@ Files are numbered by **order of use** — `00_*` is teardown, `01_*` first inst
 │   ├── 01_enroll.yml                      ← installs Mesh Agent + harden (sleep off, WoL on)
 │   ├── 02_verify_agents.yml               ← per-device agent health check
 │   ├── 03_uninstall_agents.yml            ← rollback (remove all agents)
+│   ├── 04_static_to_dhcp.yml              ← end-of-semester: flip every UP physical NIC back to DHCP (breaks WinRM mid-run by design)
 │   └── inactive_kept_for_reference/       ← superseded variants (lock/unlock dance, separate harden, labadmin transition)
 │
 ├── windows-scripts/
@@ -151,6 +154,7 @@ Each of these has a fix already in the active scripts; they're documented here s
 ## Documentation
 
 - **[FRESH_START.md](FRESH_START.md)** — the recipe for a clean install
+- **[NEXT_SEMESTER.md](NEXT_SEMESTER.md)** — DHCP-to-static restore plan for the start of next semester (uses `device_names.md` as the source of truth)
 - **[docs/02_MANAGE_DEVICES.md](docs/02_MANAGE_DEVICES.md)** — day-to-day inventory checks and adding new devices
 - **[docs/03_JOBMATE_LINUX.md](docs/03_JOBMATE_LINUX.md)** — onboard a Linux teammate
 - **[docs/04_JOBMATE_WINDOWS.md](docs/04_JOBMATE_WINDOWS.md)** — onboard a Windows teammate
