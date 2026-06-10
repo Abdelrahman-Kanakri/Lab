@@ -94,7 +94,7 @@ export CONTROLLER_IP="<CONTROLLER_IP>"
 
 Verify [~/lab/hosts.ini](../hosts.ini) has the current device list and credentials. If the teammate's copy is stale, the primary admin should send them the latest.
 
-The teammate will **not** run `install_server.sh` — they're a client, not a server.
+The teammate will **not** run `01_install_server.sh` — they're a client, not a server.
 
 ---
 
@@ -123,8 +123,8 @@ ansible lab -i ~/lab/hosts.ini -m win_ping --forks 50
 ```
 
 If anything fails:
-- Auth errors → confirm `hosts.ini` has the right credentials and is up to date. The current local admin on every device is `INU` / `2026` (was `labadmin` historically — old copies of `hosts.ini` will have stale credentials and every device will return "credentials rejected").
-- Network errors → confirm the teammate's box is on the lab subnet shown in `config.env`'s `LAB_RANGE_START` (currently `10.3.8.0/24`)
+- Auth errors → confirm `hosts.ini` has the right credentials and is up to date. The controller manages devices as the admin account `Lab-Admin` / `2026@admin` (this is what `hosts.ini` and `config.env` must use — **not** the student account). Old copies of `hosts.ini` may carry stale credentials (e.g. `INU` or `labadmin`), in which case every device returns "credentials rejected" — regenerate it with `bash ~/lab/02_add_devices.sh`.
+- Network errors → confirm the teammate's box is on the same subnet shown in `config.env`'s `LAB_RANGE_START` (the lab is currently on DHCP `10.3.5.x`; see `NEXT_SEMESTER.md` for the static-IP plan)
 - "command not found" → re-run Step 1 install commands
 
 ---
@@ -148,7 +148,7 @@ ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/02_verify_agents.yml
 
 ## What they should NOT do
 
-- **Do not** run `install_server.sh` — they don't host the server
+- **Do not** run `01_install_server.sh` — they don't host the server
 - **Do not** edit `meshcentral/meshcentral-data/` — it's the primary server's state
 - **Do not** push large changes to `~/lab/hosts.ini` without coordinating with the primary admin (otherwise inventory diverges between machines)
 

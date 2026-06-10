@@ -174,31 +174,34 @@ Get `<DEVICE_NODE_ID>` from `… meshctrl.js ListDevices`.
 
 ### Path C — physical access
 If Mesh Agent is also dead, you'll have to walk to the machine. Plug in the
-USB and re-run `Enroll-LabDevice.bat` — it resets WinRM, the firewall rule,
-and the `INU` account in one shot.
+USB and re-run `01_Enroll-LabDevice.bat` — it resets WinRM, the firewall rule,
+and the student account in one shot (it will prompt you for the student
+username + password again — use the same values as the rest of the lab).
 
 ---
 
 ## 6. Fix a host where authentication fails (401 / access denied)
 
-The `INU` account is either missing, has the wrong password, or got
-locked out. Walk to the device (or use MeshCentral terminal) and run:
+Ansible authenticates as the **admin** account `Lab-Admin` — so a 401 means
+`Lab-Admin` is missing, has the wrong password, or got locked out. (It is NOT
+the student `INU` account, which lives in Guests and Ansible never uses.) Walk
+to the device (or use the MeshCentral terminal) and run:
 
 ```powershell
-$pass = ConvertTo-SecureString "2026" -AsPlainText -Force
+$pass = ConvertTo-SecureString "2026@admin" -AsPlainText -Force
 
-if (Get-LocalUser -Name INU -ErrorAction SilentlyContinue) {
-    Set-LocalUser -Name INU -Password $pass
+if (Get-LocalUser -Name Lab-Admin -ErrorAction SilentlyContinue) {
+    Set-LocalUser -Name Lab-Admin -Password $pass
 } else {
-    New-LocalUser -Name INU -Password $pass -PasswordNeverExpires -AccountNeverExpires
-    Add-LocalGroupMember -Group "Administrators" -Member INU
+    New-LocalUser -Name Lab-Admin -Password $pass -PasswordNeverExpires -AccountNeverExpires
 }
+Add-LocalGroupMember -Group "Administrators" -Member Lab-Admin -ErrorAction SilentlyContinue
 ```
 
-Then re-run `~/lab/02_add_devices.sh`.
+Then re-run `bash ~/lab/02_add_devices.sh`.
 
-> If you've changed `LAB_ADMIN_PASS` in `config.env`, use that value here
-> instead of `2026`.
+> Use whatever `LAB_ADMIN_PASS` is in `config.env` here if you've changed it
+> from the `2026@admin` default.
 
 ---
 

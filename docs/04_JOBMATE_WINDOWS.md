@@ -93,16 +93,16 @@ The lab folder lives inside WSL at `~/lab/` (i.e. `\\wsl$\Ubuntu\home\<linuxuser
 
 ```bash
 # Inside WSL Ubuntu shell
-nano ~/lab/config.env   # set CONTROLLER_IP=<CONTROLLER_IP>
-~/lab/check_lab.sh      # confirm Ansible reaches lab devices
+nano ~/lab/config.env        # set CONTROLLER_IP=<CONTROLLER_IP>
+bash ~/lab/03_check_lab.sh   # confirm Ansible reaches lab devices
 ```
 
 ### Step 5 — Use it
 
 Same commands as the Linux teammate:
 ```bash
-~/lab/check_lab.sh
-~/lab/add_devices.sh
+bash ~/lab/03_check_lab.sh
+bash ~/lab/02_add_devices.sh
 ansible lab -i ~/lab/hosts.ini -m win_ping
 ```
 

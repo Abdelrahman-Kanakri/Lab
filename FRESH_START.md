@@ -59,7 +59,7 @@ cat ~/lab/config.env
 Check:
 - `CONTROLLER_IP` matches what `ip -4 addr show` reports for your lab interface
 - `LAB_RANGE_START` / `LAB_RANGE_END` cover your devices' subnet
-- `LAB_ADMIN_USER="INU"` and `LAB_ADMIN_PASS="2026"` (or whatever password you actually set in `windows-scripts/01_Enroll-LabDevice.ps1`)
+- `LAB_ADMIN_USER="Lab-Admin"` and `LAB_ADMIN_PASS="2026@admin"` — this is the **admin** account Ansible connects as, and it must match the `Lab-Admin` you create manually on each device (Step 4). It is **not** the student account (that one is set by the enrollment script in Step 5).
 
 If the controller's IP changed since you last ran it, **regenerate the cert** by deleting `meshcentral/meshcentral-data/` (the install script will recreate it).
 
@@ -100,16 +100,18 @@ Plug a USB into each device, run `windows-scripts/01_Enroll-LabDevice.bat` (it s
 ```
 
 The script:
-1. **Verifies** Lab-Admin exists + is in Administrators (HARD FAIL if not — go back to Step 4)
-2. **Creates INU (password 2026) in Guests** if it doesn't exist; if it does, leaves the password alone but ensures Guests-only group membership (no Users, no Administrators)
-3. Deletes every other non-built-in local user (the original first-boot user goes here)
-4. Enables WinRM + opens firewall TCP 5985
-5. Disables sleep / hibernate / Fast Startup
-6. Enables Wake-on-LAN on every UP NIC
+1. **Prompts you (in red) for the student username + password.** Press Enter to accept the suggested `INU`, or type your own; then type the password twice to confirm. **Use the exact same values on every device.**
+2. **Verifies** Lab-Admin exists + is in Administrators (HARD FAIL if not — go back to Step 4)
+3. **Creates the student account in Guests** (or, if it already exists, resets its password to what you typed) and enforces Guests-only membership (no Users, no Administrators)
+4. Deletes every other non-built-in local user (the original first-boot user goes here)
+5. Enables WinRM + opens firewall TCP 5985
+6. Disables sleep / hibernate / Fast Startup
+7. Enables Wake-on-LAN on every UP NIC
 
-After this the device is fully prepared — no other Windows-side script is needed.
+After this the device is fully prepared — no other Windows-side script is needed. Nothing locks the device or resets any other password; only the student account you named is touched.
 
 Notes:
+- Because every device shares the same student credentials, hand them to students once — they work on any machine.
 - The script prints the device's current IP at the end. Write it down + match to a physical label, or use `04_verify_lab.sh` later to dump a labelling table.
 - WoL "no software path accepted" in the script output means **that device needs a one-time BIOS visit** to enable WoL — software cannot fix this remotely.
 

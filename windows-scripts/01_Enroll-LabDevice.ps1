@@ -7,20 +7,24 @@
 #     CREATED MANUALLY before this script runs (you must be logged in as
 #     some admin to run an elevated script in the first place).
 #     Ansible on the controller connects to the device as this user.
-#   - INU       (Guests group,         password "2026")        — students.
-#     Created BY THIS SCRIPT if missing (idempotent — won't touch an
-#     existing INU's password, just ensures Guests-group membership).
+#   - Student account (Guests group) — students.
+#     The script PROMPTS YOU for its username + password (default suggestion
+#     INU), then creates it (or resets its password to what you typed if it
+#     already exists) and enforces Guests-only membership. Use the SAME values
+#     on every device so one set of student credentials works lab-wide.
 #
 # Step list:
+#   0. PROMPT for the student username + password (red warning shown)
 #   1. Verify Lab-Admin exists + is in Administrators           (HARD FAIL if not)
-#   2. Create INU if missing, ensure it's in Guests (not Users)
-#   3. Delete every other non-built-in local account            (keeps you + INU)
+#   2. Create/update the student account, ensure it's in Guests (not Users)
+#   3. Delete every other non-built-in local account            (keeps Lab-Admin + student)
 #   4. Enable WinRM (Automatic startup, listening on TCP 5985)
 #   5. Open firewall TCP 5985 inbound
 #   6. Disable sleep / display-off / disk / hibernate / Fast Startup
 #   7. Enable Wake-on-LAN on every UP physical NIC (best effort)
 #
-# Idempotent. Safe to re-run.
+# Idempotent. Safe to re-run. Touches ONLY the student account + the harden
+# settings above — it never locks the device or resets any other password.
 # ============================================================
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")) {
@@ -39,8 +43,47 @@ Write-Host "    Lab Device - ENROLL                      " -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
 
 $AdminUser = "Lab-Admin"
-$GuestUser = "INU"
 $TotalSteps = 7
+
+# ============================================================
+# OPERATOR INPUT: choose the STUDENT account username + password
+# This is the account students log in with — NOT the admin account.
+# Use the SAME username + password on EVERY device so the whole lab
+# stays uniform (the controller manages devices as Lab-Admin, so these
+# student credentials only affect who students sign in as).
+# ============================================================
+Write-Host ""
+Write-Host "=====================================================================" -ForegroundColor Red
+Write-Host "   STUDENT ACCOUNT SETUP  --  READ BEFORE YOU TYPE" -ForegroundColor Red
+Write-Host "=====================================================================" -ForegroundColor Red
+Write-Host "   You are about to choose the USERNAME and PASSWORD that STUDENTS"   -ForegroundColor Red
+Write-Host "   will use to log in to this device."                               -ForegroundColor Red
+Write-Host ""                                                                    -ForegroundColor Red
+Write-Host "   >> Use the EXACT SAME username + password on EVERY device. <<"    -ForegroundColor Red
+Write-Host "   >> Write them down now -- you will hand these to students.   <<"  -ForegroundColor Red
+Write-Host "   >> This is NOT the Lab-Admin account the controller uses.    <<"  -ForegroundColor Red
+Write-Host "=====================================================================" -ForegroundColor Red
+Write-Host ""
+
+$defaultGuest = "INU"
+$nameInput = Read-Host "Student username [press Enter to use '$defaultGuest']"
+if ([string]::IsNullOrWhiteSpace($nameInput)) { $GuestUser = $defaultGuest } else { $GuestUser = $nameInput.Trim() }
+
+while ($true) {
+    $p1 = Read-Host "Student password for '$GuestUser'" -AsSecureString
+    $p2 = Read-Host "Confirm student password"          -AsSecureString
+    $b1 = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($p1))
+    $b2 = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($p2))
+    if ([string]::IsNullOrWhiteSpace($b1)) { Write-Host "  [!!] Password cannot be empty. Try again." -ForegroundColor Red; continue }
+    if ($b1 -ne $b2)                       { Write-Host "  [!!] Passwords do not match. Try again."   -ForegroundColor Red; continue }
+    $StudentPassSec = $p1
+    break
+}
+
+Write-Host ""
+Write-Host "  -> Student account on this device will be: '$GuestUser'" -ForegroundColor Red
+Write-Host "  -> Remember: use these SAME values on every other device." -ForegroundColor Red
+Write-Host ""
 
 # ============================================================
 # STEP 1: Verify Lab-Admin exists and is in Administrators
@@ -63,26 +106,31 @@ if (-not $inAdmins) {
 Write-OK "$AdminUser present and in Administrators."
 
 # ============================================================
-# STEP 2: INU — create if missing, ensure Guests-only group membership
-# Idempotent. If INU already exists, the password is left alone (in case
-# you intentionally changed it). Only the group membership is enforced.
+# STEP 2: Student account — create if missing, ensure Guests-only group
+# membership, and set the password to the value the operator chose above.
+# The password is ENFORCED (re-applied even if the account already exists)
+# so every device in the lab ends up with the same student credentials.
 # ============================================================
 Write-Step 2 $TotalSteps "Setting up $GuestUser as a Guest..."
 
 $inu = Get-LocalUser -Name $GuestUser -ErrorAction SilentlyContinue
 if (-not $inu) {
     try {
-        $pass = ConvertTo-SecureString "2026" -AsPlainText -Force
-        New-LocalUser -Name $GuestUser -Password $pass `
+        New-LocalUser -Name $GuestUser -Password $StudentPassSec `
             -PasswordNeverExpires -AccountNeverExpires `
-            -FullName "INU Guest" -Description "Lab guest account (created by enrollment script)" | Out-Null
-        Write-OK "Created $GuestUser (password: 2026)"
+            -FullName "$GuestUser (lab student)" -Description "Lab student account (created by enrollment script)" | Out-Null
+        Write-OK "Created $GuestUser with the password you entered"
     } catch {
         Write-Fail "Failed to create $GuestUser : $_"
         exit 1
     }
 } else {
-    Write-OK "$GuestUser already exists (password left unchanged)"
+    try {
+        Set-LocalUser -Name $GuestUser -Password $StudentPassSec -PasswordNeverExpires $true
+        Write-OK "$GuestUser already existed — password reset to the value you entered"
+    } catch {
+        Write-Fail "Could not reset $GuestUser password: $_"
+    }
 }
 
 # Ensure in Guests
@@ -240,7 +288,7 @@ Write-Host ""
 Write-Host "  --- WinRM service ---" -ForegroundColor Cyan
 Get-Service WinRM | Format-Table Name, Status, StartType -AutoSize
 
-Write-Host "  --- Local users (only Lab-Admin + INU + built-ins should remain) ---" -ForegroundColor Cyan
+Write-Host "  --- Local users (only $AdminUser + $GuestUser + built-ins should remain) ---" -ForegroundColor Cyan
 Get-LocalUser | Format-Table Name, Enabled -AutoSize
 
 Write-Host "  --- Administrators (should contain only Lab-Admin + Administrator built-in) ---" -ForegroundColor Cyan

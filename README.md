@@ -80,7 +80,8 @@ For a brand-new install, follow [`FRESH_START.md`](FRESH_START.md). The condense
 
 ### Per-device (USB walk)
 5. Run `windows-scripts/01_Enroll-LabDevice.bat` once on each device. It self-elevates and:
-   - creates `INU/2026` admin, deletes other local users
+   - **prompts you for the student username + password** (use the SAME values on every device), then creates/updates that account in **Guests**
+   - deletes every other non-built-in local user (keeps Lab-Admin + the student account)
    - enables WinRM (Automatic, firewall TCP 5985)
    - disables sleep / hibernate / Fast Startup
    - enables Wake-on-LAN on every UP physical NIC
@@ -115,11 +116,11 @@ For a brand-new install, follow [`FRESH_START.md`](FRESH_START.md). The condense
 
 - **Controller IP**: edit in [config.env](config.env)
 - **Lab subnet**: derived from `LAB_RANGE_START` in `config.env`
-- **Two local accounts** on every device, both created manually:
-  - `Lab-Admin` / `2026@admin` in **Administrators** — ansible connects as this
-  - `INU` / `2026` in **Guests** — students log in as this
+- **Two local accounts** on every device:
+  - `Lab-Admin` / `2026@admin` in **Administrators** — created **manually**; ansible connects as this. Keep it identical on every device (it's the single credential in `hosts.ini`).
+  - the **student account** in **Guests** — created **by the enrollment script**, which prompts you for the username + password. Default suggestion is `INU` / `2026`, but you choose. **Use the same values on every device** so one set of credentials works lab-wide.
 - **Single Windows-side script**: `windows-scripts/01_Enroll-LabDevice.bat` (everything else in `windows-scripts/inactive_kept_for_reference/` is unused)
-- **Restrictions**: applied via INU's Guests-group membership; no scripted lockdown
+- **Restrictions**: applied via the student account's Guests-group membership; no scripted lockdown
 
 ---
 

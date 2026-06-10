@@ -25,7 +25,7 @@ if [ "$TOTAL" -eq 0 ]; then
     exit 0
 fi
 
-echo "[1/3] WinRM reachability..."
+echo "[1/2] WinRM reachability..."
 ansible lab -i ~/lab/hosts.ini -m win_ping --forks 50 2>&1 \
   | grep -E "SUCCESS|UNREACHABLE|FAILED" \
   | awk '{print $1, $2}' \
@@ -40,7 +40,7 @@ if [ "$WINRM_BAD" -gt 0 ]; then
 fi
 echo ""
 
-echo "[2/3] Mesh Agent service status (only on reachable hosts)..."
+echo "[2/2] Mesh Agent service status (only on reachable hosts)..."
 grep SUCCESS /tmp/lab_check_winrm.txt | awk '{print $1}' > /tmp/lab_check_reachable.txt
 
 if [ -s /tmp/lab_check_reachable.txt ]; then
@@ -72,31 +72,10 @@ if [ -s /tmp/lab_check_reachable.txt ]; then
     fi
 fi
 echo ""
-
-echo "[3/3] Lock state (HKLM:\\SOFTWARE\\LabPolicy\\StudentLock)..."
-if [ -s /tmp/lab_check_reachable.txt ]; then
-    ansible lab -i /tmp/lab_check.ini -m win_shell \
-        -a "(Get-ItemProperty 'HKLM:\\SOFTWARE\\LabPolicy\\StudentLock' -ErrorAction SilentlyContinue).Locked" \
-        --forks 50 2>&1 \
-      | awk '/SUCCESS/ {host=$1} /^[01]$/ {print host, ($1==1 ? "Locked" : "UNLOCKED")}' \
-      | sed 's/=>.*//' \
-      | sort -t. -k4 -n > /tmp/lab_check_lock.txt
-
-    LOCKED=$(grep -c "Locked" /tmp/lab_check_lock.txt || true)
-    UNLOCKED=$(grep -c "UNLOCKED" /tmp/lab_check_lock.txt || true)
-    echo "    locked: $LOCKED   UNLOCKED: $UNLOCKED"
-    if [ "$UNLOCKED" -gt 0 ]; then
-        echo "    These hosts are NOT locked (probably need re-lock):"
-        grep "UNLOCKED" /tmp/lab_check_lock.txt | sed 's/^/      /'
-    fi
-fi
-
-echo ""
 echo "================================================================"
 echo "  Summary"
 echo "================================================================"
 echo "  Inventory:        $TOTAL"
 echo "  WinRM reachable:  $WINRM_OK"
 echo "  Mesh Agent up:    ${AGENT_RUN:-0}"
-echo "  Locked:           ${LOCKED:-0}"
 echo "================================================================"

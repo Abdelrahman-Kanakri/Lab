@@ -1,0 +1,87 @@
+---
+# 05_launch_seb.yml — auto-login as the student account and launch SEB
+# (SebClientSettings.seb) from the desktop.
+#
+# What it does:
+#   1. Finds SebClientSettings.seb (checks the student desktop, then Public Desktop)
+#   2. Sets Windows autologon (student_user / student_pass) so the device logs
+#      in automatically on boot
+#   3. Sets a RunOnce key to open SebClientSettings.seb on the first login
+#   4. Reboots the device — it comes back, auto-logs in, and SEB opens
+#
+# The student_user / student_pass vars below default to INU / 2026. If you set
+# a different student username/password during enrollment, override them:
+#   ansible-playbook ... -e student_user=<name> -e student_pass=<pass>
+#
+# The autologon keys are intentionally LEFT in place so the device can log in
+# if WinRM is not available. Clear them manually after the exam if needed:
+#   ansible lab -i ~/lab/hosts.ini -m win_regedit \
+#     -a "path=HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon \
+#         name=AutoAdminLogon data=0 type=String"
+#
+# Usage:
+#   ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/05_launch_seb.yml --forks 30
+
+- name: Log in as the student account and launch SEB on all lab devices
+  hosts: lab
+  gather_facts: false
+
+  # Student account that students log in with — must match what the
+  # enrollment script (01_Enroll-LabDevice.ps1) created on the devices.
+  # Override on the command line if you chose different values, e.g.:
+  #   ansible-playbook ... -e student_user=INU -e student_pass=2026
+  vars:
+    student_user: INU
+    student_pass: "2026"
+
+  tasks:
+    - name: Find sebconfig.seb on the desktop
+      win_shell: |
+        $paths = @(
+            "C:\Users\{{ student_user }}\Desktop\SebClientSettings.seb",
+            "C:\Users\Public\Desktop\SebClientSettings.seb",
+            "C:\Users\SebClientSettings.seb"
+        )
+        foreach ($p in $paths) {
+            if (Test-Path $p) { $p; exit 0 }
+        }
+        # Fallback: search all user desktops
+        $found = Get-ChildItem -Path "C:\Users" -Recurse -Filter "SebClientSettings.seb" `
+                               -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($found) { $found.FullName } else { "NOT_FOUND" }
+      register: seb_path_result
+      changed_when: false
+
+    - name: Show found path
+      debug:
+        msg: "sebconfig.seb → {{ seb_path_result.stdout | trim }}"
+
+    - name: Fail if sebconfig.seb not found
+      fail:
+        msg: "SebClientSettings.seb not found on {{ inventory_hostname }} — place it on the INU Desktop first."
+      when: "'NOT_FOUND' in seb_path_result.stdout"
+
+    - name: Set autologon registry keys (INU / 2026)
+      win_regedit:
+        path: HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon
+        name: "{{ item.name }}"
+        data: "{{ item.data }}"
+        type: String
+      loop:
+        - { name: AutoAdminLogon,  data: "1" }
+        - { name: DefaultUserName, data: "{{ student_user }}" }
+        - { name: DefaultPassword, data: "{{ student_pass }}" }
+        - { name: DefaultDomainName, data: "." }
+
+    - name: Set RunOnce to launch SEB on the student account's first login
+      win_regedit:
+        path: HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce
+        name: LaunchSEB
+        data: 'cmd.exe /c start "" "{{ seb_path_result.stdout | trim }}"'
+        type: String
+
+    - name: Reboot — device will auto-login as the student account and open SEB
+      win_reboot:
+        reboot_timeout: 120
+        post_reboot_delay: 15
+      failed_when: false

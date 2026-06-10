@@ -4,7 +4,7 @@ Every adjustable setting on the Nobara controller box, with the exact command
 to change it and the exact command to verify the change. Each section is
 self-contained — find the setting you want to change, copy the commands, done.
 
-For the first-time build of a brand-new controller, follow [`01_IMPLEMENTATION.md`](01_IMPLEMENTATION.md).
+For the first-time build of a brand-new controller, follow [`FRESH_START.md`](../FRESH_START.md).
 This file is for **changes** to an already-running controller.
 
 ---
@@ -31,7 +31,8 @@ Convention used in commands:
 | Lab subnet | [`config.env`](../config.env) | `LAB_RANGE_START` / `LAB_RANGE_END` |
 | Lab device admin user | [`config.env`](../config.env) | `LAB_ADMIN_USER` |
 | Lab device admin password | [`config.env`](../config.env) | `LAB_ADMIN_PASS` |
-| Lab device admin (also) | [`windows-scripts/01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) | `$user` / `$pass` |
+| Lab device admin name (also) | [`windows-scripts/01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) | `$AdminUser` (verify-only — created manually) |
+| Student account name | [`config.env`](../config.env) | `STUDENT_USER` (password set at enrollment prompt) |
 | MeshCentral admin username | (created in web UI on first launch) | — |
 | MeshCentral admin password | reset via CLI | `--resetaccount` |
 | MeshCentral session key | `~/lab/meshcentral/meshcentral-data/config.json` | `settings.sessionKey` |
@@ -120,29 +121,41 @@ or manually edit `hosts.ini`.
 
 ### 2.3 Lab device admin credentials
 
-**What it does:** the local Windows admin (`INU/2026` by default) created
-on every device by the enrollment USB. Ansible uses these creds to connect.
+**What it does:** the local Windows admin (`Lab-Admin/2026@admin` by default)
+that exists on every device. Ansible uses these creds to connect. This is the
+**admin** account — created **manually** on each device (the enrollment script
+only verifies it). It is separate from the **student** account (Guests), which
+the enrollment script prompts you for and which Ansible never uses.
 
-**Default:** `LAB_ADMIN_USER=INU`, `LAB_ADMIN_PASS=2026`
-**Where:** `config.env` + `windows-scripts/01_Enroll-LabDevice.ps1` + `hosts.ini` (auto-regenerated)
+**Default:** `LAB_ADMIN_USER=Lab-Admin`, `LAB_ADMIN_PASS=2026@admin`
+**Where:** `config.env` + `hosts.ini` (auto-regenerated). The student account
+name is tracked separately as `STUDENT_USER` in `config.env`.
 
-**Change the username:**
+**Change the username:** `Lab-Admin` is created **manually** on each device, so
+changing the name means recreating the account everywhere as well as updating the
+controller config.
 ```bash
 NEW_USER="<newadmin>"
 
 # 1. config.env
 sed -i "s|^export LAB_ADMIN_USER=.*|export LAB_ADMIN_USER=\"$NEW_USER\"|" ~/lab/config.env
 
-# 2. Enrollment script (used by future USB walks)
-sed -i "s|^\$user = \".*\"|\$user = \"$NEW_USER\"|" \
+# 2. Enrollment script — update the name it VERIFIES (it does not create the admin)
+sed -i "s|^\$AdminUser = \".*\"|\$AdminUser = \"$NEW_USER\"|" \
   ~/lab/windows-scripts/01_Enroll-LabDevice.ps1
 
-# 3. Re-generate hosts.ini (run after walking USB to re-enrol with new user)
+# 3. On EVERY device (manually, or via Ansible while the old admin still works):
+#    net user <newadmin> <pass> /add && net localgroup Administrators <newadmin> /add
+#    then remove the old admin once the new one is confirmed.
+
+# 4. Re-generate hosts.ini against the new credential
 source ~/lab/config.env
-~/lab/02_add_devices.sh
+bash ~/lab/02_add_devices.sh
 ```
 
-**Rotate the password (fleet-wide, no USB walk needed):**
+**Rotate the password (fleet-wide, no USB walk needed):** the admin password is
+NOT stored in any script (the enrollment script doesn't create the admin), so you
+only push it to the devices and update `config.env`.
 ```bash
 NEW_PASS="<NewPassword>"
 
@@ -153,17 +166,14 @@ ansible lab -i ~/lab/hosts.ini -m win_user \
   -a "name=$LAB_ADMIN_USER password=$NEW_PASS update_password=always password_never_expires=yes groups=Administrators" \
   --forks 50
 
-# 2. Update config.env
+# 2. Update config.env (helper scripts regenerate hosts.ini from this)
 sed -i "s|^export LAB_ADMIN_PASS=.*|export LAB_ADMIN_PASS=\"$NEW_PASS\"|" ~/lab/config.env
 
-# 3. Update windows-scripts/ (so future USB enrols use the new password)
-sed -i "s|ConvertTo-SecureString \".*\" -AsPlainText|ConvertTo-SecureString \"$NEW_PASS\" -AsPlainText|" \
-  ~/lab/windows-scripts/01_Enroll-LabDevice.ps1
-
-# 4. Sync hosts.ini (the script will pick up the new password)
+# 3. Update the live hosts.ini so the very next command authenticates
 sed -i "s|^ansible_password=.*|ansible_password=$NEW_PASS|" ~/lab/hosts.ini
 
-# 5. Verify
+# 4. Verify
+source ~/lab/config.env
 ansible lab -i ~/lab/hosts.ini -m win_ping --forks 50
 ```
 
@@ -468,7 +478,7 @@ crontab -e
 (Cron runs as your user; the `systemctl` calls inside need the user to have
 NOPASSWD sudo for those commands, or run the cron under root.)
 
-**Restore on a new machine:** complete Phases 0–1 of `01_IMPLEMENTATION.md`,
+**Restore on a new machine:** complete the install steps in `FRESH_START.md`,
 **stop the service**, replace `meshcentral-data/` with the tarball contents,
 start the service, then update IP per §2.1 if it changed.
 

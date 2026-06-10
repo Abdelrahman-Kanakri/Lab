@@ -7,43 +7,43 @@ The principle: **every device should look identical**. If you need to deviate
 for one device, do it via Ansible/MeshCentral on that single host — don't
 edit scripts ad-hoc, because the next re-enrollment will undo your change.
 
+> ## The active model (read this first)
+>
+> The lab no longer uses any scripted **lockdown**, **scheduled sleep/shutdown**,
+> or **bulk password-reset**. Those old scripts live in
+> `windows-scripts/inactive_kept_for_reference/` and are **not** part of the
+> registration flow — don't run them expecting them to be current. The active
+> model is deliberately simple:
+>
+> - **Admin account** `Lab-Admin` / `2026@admin` (Administrators) — created
+>   **manually**, used by Ansible. The single credential in `hosts.ini`.
+> - **Student account** (Guests) — created by `01_Enroll-LabDevice.ps1`, which
+>   **prompts** you for the username + password. Student restrictions come purely
+>   from **Guests-group membership** — there is no lockdown script.
+> - **Power**: never sleep / never hibernate / Fast Startup off / Wake-on-LAN on.
+>   No scheduled sleep or shutdown tasks — devices stay awake and are woken or
+>   shut down on demand via MeshCentral/Ansible.
+
 ---
 
 ## 1. Canonical device state
 
 Every lab device, after a clean enrollment, is in this state:
 
-| Area | Setting | Default value | Set by |
+| Area | Setting | Value | Set by |
 |---|---|---|---|
-| **Identity** | Local admin user | `INU` | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
-| **Identity** | Local admin password | `2026` | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
-| **Identity** | All other local users password | `2026` | [`04_Reset-Passwords.ps1`](../windows-scripts/04_Reset-Passwords.ps1) |
+| **Identity** | Admin user (Administrators) | `Lab-Admin` / `2026@admin` | created **manually**; verified by [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
+| **Identity** | Student user (Guests) | operator-chosen at the prompt (default `INU`) | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
+| **Identity** | All other local users | deleted | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
 | **Remote mgmt** | WinRM service | Running, Automatic startup | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
 | **Remote mgmt** | WinRM listener | HTTP on port 5985 | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
 | **Remote mgmt** | Firewall rule `WinRM-HTTP-Lab` | Allow TCP 5985 inbound | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
 | **Remote mgmt** | TrustedHosts | `*` | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
-| **Remote mgmt** | MeshCentral agent | Service "Mesh Agent" running | [`playbooks/01_enroll_with_unlock.yml`](../playbooks/01_enroll_with_unlock.yml) |
-| **Lockdown** | Lock state marker | `HKLM:\SOFTWARE\LabPolicy\StudentLock\Locked = 1` | [`02_Lock-StudentDevice.ps1`](../windows-scripts/02_Lock-StudentDevice.ps1) |
-| **Lockdown** | Microsoft Store | Blocked | [`02_Lock-StudentDevice.ps1`](../windows-scripts/02_Lock-StudentDevice.ps1) |
-| **Lockdown** | MSI installs (everyone) | `DisableMSI = 2` | [`02_Lock-StudentDevice.ps1`](../windows-scripts/02_Lock-StudentDevice.ps1) |
-| **Lockdown** | EXE/MSI from `Downloads`, `Desktop`, `%TEMP%`, `AppData` | Blocked via SRP | [`02_Lock-StudentDevice.ps1`](../windows-scripts/02_Lock-StudentDevice.ps1) |
-| **Lockdown** | Wallpaper change | Disabled | [`02_Lock-StudentDevice.ps1`](../windows-scripts/02_Lock-StudentDevice.ps1) |
-| **Lockdown** | Lock-screen change | Disabled | [`02_Lock-StudentDevice.ps1`](../windows-scripts/02_Lock-StudentDevice.ps1) |
-| **Lockdown** | Right-click → Set as background | Hidden | [`02_Lock-StudentDevice.ps1`](../windows-scripts/02_Lock-StudentDevice.ps1) |
-| **Lockdown** | Password change (Ctrl-Alt-Del) | Blocked | [`02_Lock-StudentDevice.ps1`](../windows-scripts/02_Lock-StudentDevice.ps1) |
-| **Lockdown** | Registry editor (non-admin) | Blocked | [`02_Lock-StudentDevice.ps1`](../windows-scripts/02_Lock-StudentDevice.ps1) |
-| **Power** | Timezone | Jordan Standard Time (UTC+3) | [`03_Setup-SleepSchedule.ps1`](../windows-scripts/03_Setup-SleepSchedule.ps1) |
-| **Power** | Hibernate | Off | [`03_Setup-SleepSchedule.ps1`](../windows-scripts/03_Setup-SleepSchedule.ps1) |
-| **Power** | Wake timers | Enabled (AC + DC) | [`03_Setup-SleepSchedule.ps1`](../windows-scripts/03_Setup-SleepSchedule.ps1) |
-| **Power** | Wake task | 08:00 Sat–Wed | [`03_Setup-SleepSchedule.ps1`](../windows-scripts/03_Setup-SleepSchedule.ps1) |
-| **Power** | Auto-sleep task | 16:00 daily | [`03_Setup-SleepSchedule.ps1`](../windows-scripts/03_Setup-SleepSchedule.ps1) |
-| **Power** | Idle sleep | Disabled (the scheduled task forces sleep instead) | [`03_Setup-SleepSchedule.ps1`](../windows-scripts/03_Setup-SleepSchedule.ps1) |
-
-**Alternative power profile:** if you want hard shutdowns instead of sleep,
-swap [`03_Setup-SleepSchedule.ps1`](../windows-scripts/03_Setup-SleepSchedule.ps1)
-for [`07_Setup-ShutdownSchedule.ps1`](../windows-scripts/07_Setup-ShutdownSchedule.ps1).
-It also blocks the Shutdown UI between 08:00 and 16:00 on active weekdays.
-This requires BIOS-level "Wake on RTC" to power back on the next morning.
+| **Remote mgmt** | MeshCentral agent | Service "Mesh Agent" running | [`playbooks/01_enroll.yml`](../playbooks/01_enroll.yml) |
+| **Restrictions** | Student limits | via **Guests-group membership** only (no lockdown script) | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) |
+| **Power** | Sleep / display / disk / hibernate timeouts | All `0` (never) | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) + [`playbooks/01_enroll.yml`](../playbooks/01_enroll.yml) |
+| **Power** | Hibernation + Fast Startup | Off (`powercfg -h off`) | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) + [`playbooks/01_enroll.yml`](../playbooks/01_enroll.yml) |
+| **Power** | Wake-on-LAN | Enabled on every UP physical NIC (best effort) | [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1) + [`playbooks/01_enroll.yml`](../playbooks/01_enroll.yml) |
 
 ---
 
@@ -51,7 +51,7 @@ This requires BIOS-level "Wake on RTC" to power back on the next morning.
 
 | Where you change it | When to use | Effort |
 |---|---|---|
-| **A. Script source** (`windows-scripts/*.ps1`) + USB re-walk | Permanent change for all future devices | Walk to every device |
+| **A. Script source** (`windows-scripts/*.ps1`, `playbooks/*.yml`) + re-run | Permanent change for all future devices | Walk to every device, or re-run the playbook |
 | **B. Ansible** (push + run on existing devices) | Apply same change to all already-enrolled devices | One command from Linux |
 | **C. MeshCentral terminal** (one device) | One-off fix on one machine only | Browser, single device |
 
@@ -66,83 +66,51 @@ fleet.
 For each setting: where it's defined, how to change it, how to push it to all
 devices, and how to verify.
 
-### 3.1 Lab admin username / password
+### 3.1 Account credentials
 
-**Defines who Ansible logs in as on every Windows device.**
+There are two accounts, and they are changed in different places.
 
-#### Where to change
-[`windows-scripts/01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1):
-```powershell
-$user = "INU"
-$pass = ConvertTo-SecureString "2026" -AsPlainText -Force
-```
+#### Admin account (`Lab-Admin`) — what Ansible logs in as
 
-[`hosts.ini`](../hosts.ini):
-```ini
-[lab:vars]
-ansible_user=INU
-ansible_password=2026
-```
-
-Also update the inline credentials in:
-- [`02_add_devices.sh`](../02_add_devices.sh) (two `ansible_user/ansible_password` blocks)
-- [`03_check_lab.sh`](../03_check_lab.sh) (one block)
-- [`collect_macs.py`](../collect_macs.py) (`USER` / `PASSWORD` constants near top)
-
-#### Apply to existing devices (without re-walking USB)
+This account is **created manually** on each device (the enrollment script only
+verifies it exists — it does not create or set its password). The controller
+side is configured in [`config.env`](../config.env):
 ```bash
-source ~/lab/config.env
-ansible lab -i ~/lab/hosts.ini -m win_user \
-  -a "name=INU password=NewPassword update_password=always password_never_expires=yes groups=Administrators" \
-  --forks 50
-# Then update hosts.ini with the new password and re-test:
-ansible lab -i ~/lab/hosts.ini -m win_ping --forks 50
+export LAB_ADMIN_USER="Lab-Admin"
+export LAB_ADMIN_PASS="2026@admin"
 ```
+All shell scripts read these values and regenerate [`hosts.ini`](../hosts.ini)
+from them, so you don't edit `hosts.ini` by hand. To **rotate** the admin
+password fleet-wide, follow the procedure in
+[`06_CONTROLLER_CONFIG.md`](06_CONTROLLER_CONFIG.md) → §2.3.
 
-#### Verify
+Verify:
 ```bash
 ansible lab -i ~/lab/hosts.ini -m win_ping --forks 50
-# Or on a single device:
+# Single device:
+ansible <ip> -i ~/lab/hosts.ini -m win_shell -a "Get-LocalUser Lab-Admin | Format-List Name,Enabled,PasswordExpires"
+```
+
+#### Student account — what students log in as
+
+Set **interactively** when you run [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1)
+on each device: the script prompts (in red) for the username and password.
+Use the **same values on every device**. To change them later, just re-run the
+enrollment script on the device — it resets the student account's password to
+whatever you type. Record the chosen username in `config.env` so
+`04_verify_lab.sh` checks for the right account:
+```bash
+export STUDENT_USER="INU"   # the name you typed at the prompt
+```
+
+Verify:
+```bash
 ansible <ip> -i ~/lab/hosts.ini -m win_shell -a "Get-LocalUser INU | Format-List Name,Enabled,PasswordExpires"
 ```
 
 ---
 
-### 3.2 Reset all local user passwords
-
-**Unifies every enabled local user's password — useful before exams.**
-
-#### Where to change
-[`windows-scripts/04_Reset-Passwords.ps1`](../windows-scripts/04_Reset-Passwords.ps1):
-```powershell
-$UnifiedPassword = "2026"
-```
-
-#### Apply to all devices
-USB walk: `04_Run-ResetPasswords.bat` on each device (interactive — asks
-"YES" to confirm).
-
-Or push remotely (no prompt):
-```bash
-source ~/lab/config.env
-ansible lab -i ~/lab/hosts.ini -m win_shell -a "
-  \$pw = ConvertTo-SecureString '2026' -AsPlainText -Force;
-  Get-LocalUser | Where-Object Enabled -eq \$true | ForEach-Object {
-    Set-LocalUser -Name \$_.Name -Password \$pw -PasswordNeverExpires \$true
-  }
-" --forks 50
-```
-
-#### Verify
-```bash
-ansible lab -i ~/lab/hosts.ini -m win_shell \
-  -a "Get-LocalUser | Where-Object Enabled -eq \$true | Select Name,PasswordExpires" \
-  --forks 50
-```
-
----
-
-### 3.3 WinRM port / transport
+### 3.2 WinRM port / transport
 
 **Default: HTTP on 5985 with NTLM auth.** Switch to HTTPS on 5986 if you
 need encrypted WinRM (most labs don't — the network is already isolated).
@@ -173,160 +141,42 @@ ansible lab -i ~/lab/hosts.ini -m win_ping --forks 50
 
 ---
 
-### 3.4 Lockdown profile (what's blocked)
+### 3.3 Power behaviour
 
-**The most-edited script.** Each lockdown rule is a separate registry write
-in [`02_Lock-StudentDevice.ps1`](../windows-scripts/02_Lock-StudentDevice.ps1).
-Comment out (or delete) any block to drop that restriction.
+The active power policy is "**never sleep, never hibernate, Wake-on-LAN on**",
+applied by both [`01_Enroll-LabDevice.ps1`](../windows-scripts/01_Enroll-LabDevice.ps1)
+and [`playbooks/01_enroll.yml`](../playbooks/01_enroll.yml). There are **no
+scheduled wake/sleep/shutdown tasks** — devices stay awake and you wake or shut
+them down on demand from MeshCentral or Ansible.
 
-| Block to relax | Comment out (lines) |
-|---|---|
-| Microsoft Store stays accessible | STEP 1 (lines 32–39) |
-| Allow MSI installs (admins only) | Change `DisableMSI` from `2` to `1` (line 48) |
-| Allow MSI installs (everyone) | Comment out STEP 2 (lines 41–55) |
-| Allow installer execution from Downloads | Comment out STEP 3 (lines 57–99) |
-| Allow wallpaper change | Comment out STEP 5 (lines 173–235) |
-| Allow password change at lock screen | Comment out STEP 6 line `DisableChangePassword` |
-| Allow regedit for non-admins | Comment out STEP 7 line `DisableRegistryTools` |
-| Re-enable Task Manager (already on) | (no change — it's not blocked) |
-
-**Do not edit other STEPs piecemeal** — each STEP is internally consistent.
-If you remove half a STEP you'll get partial enforcement.
-
-#### Apply to existing devices
-USB walk: `02_Run-Lock.bat` on each device.
-
-Or push the script via Ansible and run remotely:
+#### Change it for the whole fleet
+Edit the `powercfg` block in [`playbooks/01_enroll.yml`](../playbooks/01_enroll.yml)
+(and the matching block in the enrollment script for future USB walks), then
+re-run the playbook:
 ```bash
-source ~/lab/config.env
+ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/01_enroll.yml --forks 30
+```
 
-# Stage the script
-ansible lab -i ~/lab/hosts.ini -m win_copy \
-  -a "src=~/lab/windows-scripts/02_Lock-StudentDevice.ps1 dest=C:\\Users\\Public\\Lock.ps1" \
-  --forks 50
-
-# Run it
-ansible lab -i ~/lab/hosts.ini -m win_shell \
-  -a "powershell -ExecutionPolicy Bypass -File C:\\Users\\Public\\Lock.ps1" \
-  --forks 50
-
-# Cleanup
-ansible lab -i ~/lab/hosts.ini -m win_file \
-  -a "path=C:\\Users\\Public\\Lock.ps1 state=absent" --forks 50
+#### Shut down / reboot / wake on demand
+```bash
+# Shut down all devices
+ansible lab -i ~/lab/hosts.ini -m win_command -a "shutdown /s /t 0" --forks 50
+# Reboot one device
+ansible 10.3.5.X -i ~/lab/hosts.ini -m win_command -a "shutdown /r /t 0"
+# Wake an offline device: MeshCentral UI → right-click grey device → Wake-up
+# (or `wol -f ~/lab/macs.txt` once MACs are banked)
 ```
 
 #### Verify
 ```bash
-# Lock state marker
 ansible lab -i ~/lab/hosts.ini -m win_shell \
-  -a "(Get-ItemProperty 'HKLM:\\SOFTWARE\\LabPolicy\\StudentLock').Locked" \
-  --forks 50
-
-# Specific block, e.g. MSI install policy
-ansible lab -i ~/lab/hosts.ini -m win_shell \
-  -a "(Get-ItemProperty 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer').DisableMSI" \
-  --forks 50
-```
-
-The fastest fleet-wide check is `~/lab/03_check_lab.sh` — its third pane
-reports `Locked` / `UNLOCKED` per host.
-
-#### Roll back lockdown (one device or all)
-USB: `05_Run-Unlock.bat` on the device.
-
-Or via Ansible:
-```bash
-ansible lab -i ~/lab/hosts.ini -m win_copy \
-  -a "src=~/lab/windows-scripts/05_Unlock-StudentDevice.ps1 dest=C:\\Users\\Public\\Unlock.ps1" --forks 50
-ansible lab -i ~/lab/hosts.ini -m win_shell \
-  -a "powershell -ExecutionPolicy Bypass -File C:\\Users\\Public\\Unlock.ps1" --forks 50
+  -a "powercfg /a" --forks 50
+# 04_verify_lab.sh also reports sleep timeout, hibernation, and WoL per device.
 ```
 
 ---
 
-### 3.5 Power schedule — wake/sleep/shutdown times
-
-**Two mutually-exclusive profiles:** sleep (script `03`) or shutdown (script `07`).
-Pick one and use it on every device — mixing them creates conflicting tasks.
-
-#### Where to change (sleep profile)
-Top of [`03_Setup-SleepSchedule.ps1`](../windows-scripts/03_Setup-SleepSchedule.ps1):
-```powershell
-$StartHour      = 8     # wake at 08:00
-$StartMinute    = 0
-$SleepHour      = 16    # auto-sleep at 16:00
-$SleepMinute    = 0
-$ActiveDays  = @("Saturday","Sunday","Monday","Tuesday","Wednesday")  # wake + sleep
-$PassiveDays = @("Thursday","Friday")                                  # sleep only
-```
-
-[`07_Setup-ShutdownSchedule.ps1`](../windows-scripts/07_Setup-ShutdownSchedule.ps1)
-has the same variables — change them in the file you actually use.
-
-#### Apply
-USB: re-run the corresponding `Run-*.bat`. Or push via Ansible (analogous to
-3.4).
-
-The script removes any old `\LabSchedule\` tasks before creating new ones, so
-re-running is safe.
-
-#### Verify
-```bash
-# List the scheduled tasks
-ansible lab -i ~/lab/hosts.ini -m win_shell \
-  -a "Get-ScheduledTask -TaskPath '\\LabSchedule\\' | Select TaskName,State" \
-  --forks 50
-```
-
-#### Remove the schedule (one device or all)
-USB: `06_Run-ScheduleRemove.bat` on the device.
-
-#### Caveat: timezone
-Both scripts force timezone to **Jordan Standard Time (UTC+3)** before creating
-tasks. If your lab is in a different timezone, edit:
-```powershell
-Set-TimeZone -Id "Jordan Standard Time"
-```
-to your zone (e.g. `"Eastern Standard Time"`, `"Arabian Standard Time"`).
-List available zones with:
-```powershell
-Get-TimeZone -ListAvailable | Select Id
-```
-
-#### Caveat: BIOS for shutdown profile
-The shutdown profile (`07_*`) needs **"RTC Wake Alarm" enabled in BIOS** on
-each device to power back on after auto-shutdown. The sleep profile (`03_*`)
-does **not** need any BIOS changes — wake-from-sleep works through Windows
-alone. Sleep is the recommended profile for that reason.
-
----
-
-### 3.6 Wallpaper / lock-screen image
-
-The lockdown script forces the Windows default. To set your own:
-
-Edit [`02_Lock-StudentDevice.ps1`](../windows-scripts/02_Lock-StudentDevice.ps1)
-near the top of STEP 4 / STEP 5:
-```powershell
-$defaultWallpaper  = "C:\Windows\Web\Wallpaper\Windows\img0.jpg"
-$defaultLockScreen = "C:\Windows\Web\Screen\img100.jpg"
-```
-
-Replace with paths that **exist on every device** (or push your image first):
-```bash
-ansible lab -i ~/lab/hosts.ini -m win_copy \
-  -a "src=~/lab/files/lab-wallpaper.jpg dest=C:\\Windows\\Web\\Wallpaper\\Lab\\lab.jpg" \
-  --forks 50
-```
-Then change the script:
-```powershell
-$defaultWallpaper = "C:\Windows\Web\Wallpaper\Lab\lab.jpg"
-```
-And re-run `02_Run-Lock.bat` (or push via Ansible per 3.4).
-
----
-
-### 3.7 MeshCentral agent
+### 3.4 MeshCentral agent
 
 Server-keyed binary at `~/lab/files/MeshService64.exe`. Installed as Windows
 service `Mesh Agent`.
@@ -355,38 +205,41 @@ The existing agent points at the old IP. Two options:
      -a "& 'C:\\Program Files\\Mesh Agent\\MeshAgent.exe' -meshaction:changeserver -server:wss://<NEW_IP>:443/agent.ashx" \
      --forks 50
    ```
-2. Re-enroll with the new server-keyed binary (see Phase 7.1 in
-   [`docs/01_IMPLEMENTATION.md`](01_IMPLEMENTATION.md)).
+2. Re-enroll with the new server-keyed binary (see
+   [`FRESH_START.md`](../FRESH_START.md) — reinstall the server and re-stage the agent).
 
 ---
 
 ## 4. End-to-end "verify a fresh device" checklist
 
-After enrolling a new device, run this on the controller to confirm every
-canonical setting is in place:
+After enrolling a new device, the simplest check is the fleet-wide end-state
+checker:
+```bash
+bash ~/lab/04_verify_lab.sh
+```
+It prints one row per device — reachable / `Lab-Admin` present / student account
+in Guests / Mesh Agent running / sleep timeout 0 / hibernation off / WoL — and
+flags anything off-spec.
 
+To inspect a single fresh device directly:
 ```bash
 source ~/lab/config.env
 HOST=10.3.5.NEW
 
 ansible $HOST -i ~/lab/hosts.ini -m win_shell -a @"
-Write-Host '--- Identity ---'
-Get-LocalUser INU | Format-List Name,Enabled,PasswordExpires
+Write-Host '--- Identity (student account) ---'
+Get-LocalUser $env:STUDENT_USER | Format-List Name,Enabled,PasswordExpires
 Write-Host '--- WinRM ---'
 Get-Service WinRM | Format-List Name,Status,StartType
 Write-Host '--- Mesh Agent ---'
 Get-Service 'Mesh Agent' | Format-List Status,StartType
-Write-Host '--- Lock state ---'
-(Get-ItemProperty 'HKLM:\SOFTWARE\LabPolicy\StudentLock' -ErrorAction SilentlyContinue) | Format-List Locked,LockedAt
-Write-Host '--- Schedule ---'
-Get-ScheduledTask -TaskPath '\LabSchedule\' -ErrorAction SilentlyContinue | Format-Table TaskName,State
-Write-Host '--- Timezone ---'
-(Get-TimeZone).Id
+Write-Host '--- Power ---'
+powercfg /a
 "@
 ```
 
-Every section should show populated values. Empty `--- Mesh Agent ---` means
-the playbook didn't complete — re-run `~/lab/02_add_devices.sh`.
+Empty `--- Mesh Agent ---` means the playbook didn't complete — re-run
+`bash ~/lab/02_add_devices.sh`.
 
 ---
 
@@ -395,27 +248,16 @@ the playbook didn't complete — re-run `~/lab/02_add_devices.sh`.
 ```bash
 source ~/lab/config.env
 
-# Re-lock every device that drifted to UNLOCKED
-ansible lab -i ~/lab/hosts.ini -m win_copy \
-  -a "src=~/lab/windows-scripts/02_Lock-StudentDevice.ps1 dest=C:\\Users\\Public\\Lock.ps1" --forks 50
-ansible lab -i ~/lab/hosts.ini -m win_shell \
-  -a "powershell -ExecutionPolicy Bypass -File C:\\Users\\Public\\Lock.ps1" --forks 50
+# Reset the student password on a device (re-run enrollment, or push directly)
+ansible 10.3.5.X -i ~/lab/hosts.ini -m win_user \
+  -a "name=$STUDENT_USER password=NewStudentPass update_password=always password_never_expires=yes groups=Guests"
 
-# Unlock a single device for maintenance
-ansible 10.3.5.X -i ~/lab/hosts.ini -m win_copy \
-  -a "src=~/lab/windows-scripts/05_Unlock-StudentDevice.ps1 dest=C:\\Users\\Public\\Unlock.ps1"
-ansible 10.3.5.X -i ~/lab/hosts.ini -m win_shell \
-  -a "powershell -ExecutionPolicy Bypass -File C:\\Users\\Public\\Unlock.ps1"
-
-# Rotate the lab admin password fleet-wide
+# Rotate the Lab-Admin password fleet-wide
 NEWPW='Spring2026!'
 ansible lab -i ~/lab/hosts.ini -m win_user \
-  -a "name=INU password=$NEWPW update_password=always password_never_expires=yes" --forks 50
-sed -i "s/^ansible_password=.*/ansible_password=$NEWPW/" ~/lab/hosts.ini
-
-# Push a new wallpaper to all devices
-ansible lab -i ~/lab/hosts.ini -m win_copy \
-  -a "src=~/lab/files/lab-wallpaper.jpg dest=C:\\Windows\\Web\\Wallpaper\\Lab\\lab.jpg" --forks 50
+  -a "name=Lab-Admin password=$NEWPW update_password=always password_never_expires=yes groups=Administrators" --forks 50
+sed -i "s|^export LAB_ADMIN_PASS=.*|export LAB_ADMIN_PASS=\"$NEWPW\"|" ~/lab/config.env
+# hosts.ini is regenerated from config.env by the helper scripts.
 
 # Reboot one device
 ansible 10.3.5.X -i ~/lab/hosts.ini -m win_command -a "shutdown /r /t 0"
@@ -423,24 +265,26 @@ ansible 10.3.5.X -i ~/lab/hosts.ini -m win_command -a "shutdown /r /t 0"
 # Reboot all devices
 ansible lab -i ~/lab/hosts.ini -m win_command -a "shutdown /r /t 0" --forks 50
 
+# Shut down all devices (end of day)
+ansible lab -i ~/lab/hosts.ini -m win_command -a "shutdown /s /t 0" --forks 50
+
 # Health snapshot
-~/lab/03_check_lab.sh
+bash ~/lab/03_check_lab.sh
 ```
 
 ---
 
 ## 6. What NOT to do
 
-- **Don't edit registry keys directly on one device** for things the lockdown
-  script controls — they'll get clobbered on the next run of
-  `02_Run-Lock.bat`. Edit the script instead.
-- **Don't mix sleep and shutdown profiles** on different devices — operators
-  will assume one model.
-- **Don't change `INU` to a domain account.** The whole flow assumes a
+- **Don't change `Lab-Admin` to a domain account.** The whole flow assumes a
   local admin; switching to a domain account requires re-doing WinRM auth,
   the playbook, and `hosts.ini`.
+- **Don't give the student account anything beyond Guests.** Adding it to Users
+  or Administrators removes the restrictions the lab relies on — the enrollment
+  script deliberately enforces Guests-only.
 - **Don't disable WinRM after enrollment** — Ansible loses the device.
   MeshCentral keeps working, but you lose batch-management until you re-enable.
 - **Don't enable RDP "for convenience"** unless you also harden the firewall —
   port 3389 from the lab subnet is not the same threat model as MeshCentral
   over 443.
+```

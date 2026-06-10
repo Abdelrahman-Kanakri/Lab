@@ -13,7 +13,7 @@ Day-to-day operations for managing the lab inventory. Two scripts cover everythi
 >   power schedule, wallpaper, etc.) →
 >   [`05_DEVICE_CONFIG.md`](05_DEVICE_CONFIG.md)
 > - First-time build of a fresh controller →
->   [`01_IMPLEMENTATION.md`](01_IMPLEMENTATION.md)
+>   [`FRESH_START.md`](../FRESH_START.md)
 > - Some hosts came back as `unreachable=1` / `failed≥1` →
 >   [`07_UNREACHABLE_DEVICES.md`](07_UNREACHABLE_DEVICES.md)
 
@@ -23,16 +23,16 @@ Day-to-day operations for managing the lab inventory. Two scripts cover everythi
 
 | Situation | Run |
 |---|---|
-| Want to see "is everything OK right now?" | `check_lab.sh` |
-| You walked to N new devices with the USB | `add_devices.sh` |
-| Some devices got re-imaged | First `Enroll-LabDevice.bat` on each, then `add_devices.sh` |
-| A teammate says "device X not responding" | `check_lab.sh` then look for X in the report |
-| Before a scheduled exam to confirm readiness | `check_lab.sh` |
-| Devices were powered off and now back on | `check_lab.sh` (no enrollment needed — agent auto-reconnects) |
+| Want to see "is everything OK right now?" | `03_check_lab.sh` |
+| You walked to N new devices with the USB | `02_add_devices.sh` |
+| Some devices got re-imaged | First `01_Enroll-LabDevice.bat` on each, then `02_add_devices.sh` |
+| A teammate says "device X not responding" | `03_check_lab.sh` then look for X in the report |
+| Before a scheduled exam to confirm readiness | `03_check_lab.sh` |
+| Devices were powered off and now back on | `03_check_lab.sh` (no enrollment needed — agent auto-reconnects) |
 
 ---
 
-## `check_lab.sh` — health snapshot
+## `03_check_lab.sh` — health snapshot
 
 ### What it shows
 
@@ -43,80 +43,64 @@ Day-to-day operations for managing the lab inventory. Two scripts cover everythi
 
 Inventory size: 28 devices
 
-[1/3] WinRM reachability...
+[1/2] WinRM reachability...
     reachable: 24   unreachable: 4
       10.3.5.16 | UNREACHABLE!
       10.3.5.37 | UNREACHABLE!
       10.3.5.84 | UNREACHABLE!
       10.3.5.93 | UNREACHABLE!
 
-[2/3] Mesh Agent service status (only on reachable hosts)...
+[2/2] Mesh Agent service status (only on reachable hosts)...
     running: 24   not running: 0
-
-[3/3] Lock state (HKLM:\SOFTWARE\LabPolicy\StudentLock)...
-    locked: 23   UNLOCKED: 1
-    These hosts are NOT locked (probably need re-lock):
-      10.3.5.122 UNLOCKED
 
 ================================================================
   Summary
   Inventory:        28
   WinRM reachable:  24
   Mesh Agent up:    24
-  Locked:           23
 ================================================================
 ```
 
 ### Run it
 ```bash
-~/lab/check_lab.sh
+bash ~/lab/03_check_lab.sh
 ```
 
 ### How to read the output
 
 | Section | Meaning | What to do |
 |---|---|---|
-| **Inventory size** | Total devices in `~/lab/hosts.ini` | If lower than expected → run `add_devices.sh` |
+| **Inventory size** | Total devices in `~/lab/hosts.ini` | If lower than expected → run `02_add_devices.sh` |
 | **WinRM reachable** | Devices that responded to Ansible | UNREACHABLE = sleeping/off, usually fine; agent reconnects on wake |
 | **Mesh Agent up** | Service status on reachable devices | Should match WinRM reachable count. Mismatch → re-enroll that host |
-| **Locked** | Devices with `Locked=1` registry flag | UNLOCKED count > 0 → re-run lock playbook on those |
 
-### Re-lock devices that drifted
-
-If `check_lab.sh` reports `UNLOCKED` devices:
-```bash
-ansible <ip1>,<ip2> -i ~/lab/hosts.ini -m win_shell -a \
-    "powershell -ExecutionPolicy Bypass -File C:\\Windows\\LabDeploy\\Lock-StudentDevice.ps1" \
-    --forks 10
-```
-
-Or use the enrollment playbook (it ends with Lock):
-```bash
-ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/enroll_with_unlock.yml --limit "<ip1>,<ip2>"
-```
+> **No "lock" step anymore.** Student restrictions are applied purely through
+> the Windows **Guests**-group membership of the student account (set during
+> enrollment). There is no lock/unlock playbook to run, and nothing locks a
+> device during registration.
 
 ---
 
-## `add_devices.sh` — discover and enroll
+## `02_add_devices.sh` — discover and enroll
 
 ### When to run it
 
-After you've physically run [Enroll-LabDevice.bat](../windows-scripts/Enroll-LabDevice.bat) on one or more new devices. It only enrolls hosts not already in `~/lab/hosts.ini`, so re-running is safe and cheap.
+After you've physically run [01_Enroll-LabDevice.bat](../windows-scripts/01_Enroll-LabDevice.bat) on one or more new devices. It only enrolls hosts not already in `~/lab/hosts.ini`, so re-running is safe and cheap.
 
 ### What it does (6 phases)
 
 ```
 [1/6] Scan 10.3.5.0/24 for WinRM (port 5985)
 [2/6] Diff against ~/lab/hosts.ini → find what's new
-[3/6] Test INU/2026 auth on the new hosts
+[3/6] Test Lab-Admin auth on the new hosts
 [4/6] Show you the list and ask to proceed (y/N)
-[5/6] Run enroll_with_unlock.yml on confirmed-working hosts
+[5/6] Run playbooks/01_enroll.yml on confirmed-working hosts
 [6/6] Merge them into ~/lab/hosts.ini
 ```
 
 ### Run it
 ```bash
-~/lab/add_devices.sh
+bash ~/lab/02_add_devices.sh
 ```
 
 ### Example session
@@ -136,7 +120,7 @@ After you've physically run [Enroll-LabDevice.bat](../windows-scripts/Enroll-Lab
       10.3.5.88
       10.3.5.110
 
-[3/6] Testing INU/2026 auth on the 4 new hosts...
+[3/6] Testing Lab-Admin auth on the 4 new hosts...
     auth OK on 4  /  failed on 0
 
 [4/6] Ready to enroll these in MeshCentral:
@@ -147,10 +131,10 @@ After you've physically run [Enroll-LabDevice.bat](../windows-scripts/Enroll-Lab
 
 Proceed with enrollment? [y/N] y
 
-[5/6] Running enrollment playbook...
+[5/6] Running enrollment playbook (playbooks/01_enroll.yml)...
     [PLAY RECAP showing 4 successes]
 
-[6/6] Merging successful hosts into ~/lab/hosts.ini...
+[6/6] Verifying enrollment and merging into ~/lab/hosts.ini...
 
 ================================================================
   Done. ~/lab/hosts.ini now has 32 devices.
@@ -164,12 +148,12 @@ Proceed with enrollment? [y/N] y
 [skip] 10.3.5.48 | UNREACHABLE!
 ```
 
-That means WinRM is open but `INU/2026` doesn't authenticate. Causes:
-- Enroll-LabDevice.bat wasn't actually run on that device → run it
-- Enroll-LabDevice.bat was run but the user named themselves something else manually
+That means WinRM is open but the `Lab-Admin` credential doesn't authenticate. Causes:
+- `01_Enroll-LabDevice.bat` wasn't actually run on that device → run it
+- `Lab-Admin` wasn't created (or has a different password than `config.env`'s `LAB_ADMIN_PASS`) → fix it on the device
 - Non-lab device (staff machine that just happens to have WinRM enabled) → skip it
 
-`add_devices.sh` automatically skips auth-failed hosts, so the enrollment continues with whatever passed.
+`02_add_devices.sh` automatically skips auth-failed hosts, so the enrollment continues with whatever passed.
 
 ---
 
@@ -189,7 +173,7 @@ ansible <IP> -i ~/lab/hosts.ini -m win_ping
 
 ### 3. Run enrollment on that one host
 ```bash
-ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/enroll_with_unlock.yml --limit <IP>
+ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/01_enroll.yml --limit <IP>
 ```
 
 ### 4. Add the IP to inventory
@@ -225,10 +209,10 @@ Open `https://10.3.5.96` → Lab group → click device → **Delete Device**.
 
 ```bash
 # Quick health
-~/lab/check_lab.sh
+bash ~/lab/03_check_lab.sh
 
 # Discover + enroll new
-~/lab/add_devices.sh
+bash ~/lab/02_add_devices.sh
 
 # Just the WinRM scan (no enrollment)
 for i in $(seq 1 254); do
@@ -243,5 +227,5 @@ ansible lab -i ~/lab/hosts.ini -m win_ping --forks 50
 ansible lab -i ~/lab/hosts.ini -m win_shell -a "Get-Date" --forks 50
 
 # Verify Mesh Agent on every device
-ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/verify_agents.yml
+ansible-playbook -i ~/lab/hosts.ini ~/lab/playbooks/02_verify_agents.yml
 ```

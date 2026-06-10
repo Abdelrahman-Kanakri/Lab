@@ -19,7 +19,7 @@ source "$(dirname "$0")/config.env"
 
 OUT="/tmp/lab_verify_raw.txt"
 ADMIN_USER="${LAB_ADMIN_USER:-Lab-Admin}"   # whichever local admin ansible uses
-GUEST_USER="INU"                            # always INU regardless of admin flavour
+GUEST_USER="${STUDENT_USER:-INU}"           # student account name (set in config.env)
 
 echo "================================================================"
 echo "  Lab end-state check"
